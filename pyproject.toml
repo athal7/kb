@@ -1,0 +1,47 @@
+[project]
+name = "kb"
+version = "0.1.0"
+description = "TUI to browse, explore, and manage a personal Obsidian-vault knowledge base, plus macOS Calendar/Reminders"
+readme = "README.md"
+authors = [
+    { name = "Stephen Golub" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "textual>=0.80",
+    "pyyaml>=6.0",
+    "pyobjc-framework-EventKit>=10.0 ; sys_platform == 'darwin'",
+]
+
+[project.scripts]
+kb = "kb.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.9.25,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "textual-dev>=1.5",
+    "ruff>=0.4",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "-m 'not manual and not smoke'"
+testpaths = ["tests"]
+python_classes = ["Test*", "Describe*"]
+python_functions = ["test_*", "it_*"]
+markers = [
+    "smoke: opt-in tests that scan the real KB (gated on KB_TUI_SMOKE=1)",
+    "manual: tests requiring a real macOS EventKit / TCC prompt",
+]
