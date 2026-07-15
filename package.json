@@ -1,0 +1,14 @@
+{
+  "name": "kb",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "bun@1.3.5",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "echo \"not yet implemented\"",
+    "test": "echo \"not yet implemented\"",
+    "typecheck": "echo \"not yet implemented\""
+  }
+}

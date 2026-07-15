@@ -1,0 +1,1 @@
+This directory will hold an anonymized sample knowledge base (fake people, products, projects, decisions, and journal entries) used by engine tests, so tests never touch a real personal KB. Empty for now.

@@ -1,0 +1,1 @@
+This directory will hold the published contract artifacts: JSON Schema generated from the engine's schema definitions, plus a `CHANGELOG.md` tracking the contract's own semver. Empty for now — the contract design doc itself is being written as a spec before this directory gets real content.
