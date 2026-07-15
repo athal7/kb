@@ -1,0 +1,94 @@
+/* kb-tui dashboard styling.
+ *
+ * The panes are plain Vertical/VerticalScroll containers with no border of
+ * their own, so without this file they render as unbroken flowing text — see
+ * the docstrings on DashboardScreen and the pane widgets for the compose()
+ * structure this file styles.
+ */
+
+/* VaultSummaryPane is a slim status strip, not a grid quadrant — it only ever
+ * shows one line of counts (see vault_summary.py), so docking it above the
+ * grid instead of giving it an equal-sized quadrant avoids a pane that's
+ * mostly empty whitespace. No border: it should read as a bar, not a card.
+ */
+VaultSummaryPane {
+    dock: top;
+    height: 1;
+    padding: 0 1;
+    background: $panel;
+}
+
+/* grid-size is set dynamically in DashboardScreen.compose() from
+ * layout_rows — an arbitrary user config, not a fixed 2x2 — so it isn't
+ * declared here.
+ */
+#dashboard-grid {
+    grid-gutter: 1 2;
+    padding: 1 2;
+}
+
+/* Every widget DashboardScreen places in the grid gets ".dashboard-pane"
+ * added in code (see DashboardScreen._build_grid_pane) rather than being
+ * selected by concrete widget class here — the grid is built from an
+ * arbitrary registered set of panes (core or plugin), not a fixed list of
+ * widget types, so styling has to key off a shared marker instead of naming
+ * each pane widget class. Row-span itself is applied directly via
+ * `widget.styles.row_span` in code (from PaneSpec.default_row_span or how
+ * many rows a pane id repeats across in layout_rows), not in CSS, since it's
+ * a per-pane, config-driven value rather than a fixed style.
+ */
+.dashboard-pane {
+    border: round $primary;
+    padding: 0 1;
+}
+
+/* Registry-driven panes are VerticalScroll (can_focus: True) and cycle with
+ * tab/shift+tab; VaultSummaryPane is a plain Vertical (can_focus: False),
+ * never gets ".dashboard-pane", and never matches this selector.
+ */
+.dashboard-pane:focus {
+    border: round $accent;
+    border-title-color: $accent;
+}
+
+/* Label defaults to width: auto, sizing to its full text width instead of the
+ * pane's — combined with VerticalScroll's overflow-x: hidden, that's what was
+ * clipping long action items/events/reminders instead of wrapping them.
+ */
+.dashboard-pane Label {
+    width: 1fr;
+}
+
+/* Hidden until Dashboard.action_open_command_line shows it — see CommandBar
+ * for the show_and_focus()/hide_and_clear() pair that flips this.
+ */
+CommandBar {
+    display: none;
+    height: auto;
+    dock: bottom;
+}
+
+CommandBar Input {
+    border: none;
+}
+
+/* Hidden until Dashboard.action_open_search shows it — see PeopleSearch for
+ * the show_and_focus()/hide_and_clear() pair that flips this. Docked to top
+ * and given real height (unlike CommandBar's single line) since it renders a
+ * multi-row live-filtered list, not just an input.
+ */
+PeopleSearch {
+    display: none;
+    dock: top;
+    height: 12;
+    border: round $primary;
+    background: $panel;
+}
+
+PeopleSearch Input {
+    border: none;
+}
+
+PeopleSearch ListView {
+    height: 1fr;
+}

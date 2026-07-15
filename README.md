@@ -1,33 +1,41 @@
 # kb
 
-A typed, versioned knowledge base engine and CLI for tracking people, projects, and decisions.
-
-## Why
-
-Personal and team knowledge — who's who, what's happening on which project, past decisions — tends to live as scattered notes that an AI coding agent greps through directly. That works until it doesn't: no validation, no schema, no safe way to write back. `kb` generalizes that pile of notes into an engine that owns the storage format and its invariants, exposing one typed JSON contract so any client (CLI, scripts, an MCP server, a TUI) can read and write safely without ever touching the disk format directly.
-
-## Architecture
-
-- **Engine** — a deterministic library that owns all invariants and the on-disk storage format. Private and opaque; free to change later without breaking anyone.
-- **Contract** — the one typed, versioned JSON read/write interface every consumer binds to. This is the public surface, not the disk format.
-- **CLI** (`kb`) — the primary transport. Used directly from the shell and by AI coding agents as a cheap, opaque subprocess call.
-- **MCP server** — a secondary, speculative transport. Deterministic read/query/resolve only — no sampling or judgment features — deferred until a real MCP-native consumer exists.
-- **TUI** — a separate community consumer, binding via the CLI or a direct library link.
+A personal/team knowledge base: people, projects, decisions, and journal notes, browsed and managed through a terminal dashboard.
 
 ## Status
 
-Early scaffold. No implementation yet — see the tracking issues:
+This repo currently hosts a working Python implementation — a dashboard TUI with a growing CLI surface, unified under one `kb` entry point (`opencode`-style: bare `kb` launches the interactive dashboard; subcommands will handle scriptable, AI-facing operations as they're added). This is the foundation going forward, per the discussion on [issue #3](https://github.com/athal7/kb/issues/3).
 
-- Issue #TBD — CLI + engine (start here)
-- Issue #TBD — MCP adapter (deferred)
-- Issue #TBD — TUI integration hooks (coordinate with community TUI effort)
+What works today:
 
-## Design principles
+- A dashboard with an action-items pane, fuzzy person search (`/`), vim-style `:` command bar, and keybindings for navigating panes.
+- A plugin system: panes are registered rather than hardcoded, and layout is driven by `~/.config/kb/config.toml`. Calendar/reminders integration lives behind this plugin boundary rather than shipping as a core pane.
+- ~239 tests, built TDD-first (`uv run pytest`), ruff-clean.
 
-- The storage format is a private implementation detail, never a public contract.
-- The contract is versioned; additive changes never break older clients.
-- Going opaque must not lose grep-like search power — the contract ships a real query/search verb.
-- Deterministic-only for the MCP surface — no sampling or elicitation until a concrete need exists.
+What's not done yet:
+
+- No CLI subcommands beyond the bare TUI launch — `kb` opens the dashboard; there's no scriptable read/write surface yet.
+- The vault-parsing code (`src/kb/core/`) is a working direct-to-markdown implementation, not yet refactored toward the Engine/Contract shape defined in [`openspec/specs/domain-model/spec.md`](./openspec/specs/domain-model/spec.md) and [`openspec/specs/kb-contract/spec.md`](./openspec/specs/kb-contract/spec.md). That refactor is future work, not this PR.
+
+### Open discussion point: the TypeScript scaffold
+
+`packages/{engine,cli,mcp-server}` are the original TypeScript scaffold. Per the issue #3 discussion, the intent is to retire that scaffold in favor of this Python codebase — but that's not resolved yet. This PR is meant to surface that discussion, not settle it unilaterally, so the TS packages are left in place pending removal or reconciliation.
+
+## Running it
+
+```
+uv sync
+uv run kb
+```
+
+Requires Python 3.12+.
+
+## Development
+
+```
+uv run pytest -q
+uv run ruff check .
+```
 
 ---
 
