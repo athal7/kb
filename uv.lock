@@ -291,6 +291,7 @@ name = "kb"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "click" },
     { name = "pyobjc-framework-eventkit", marker = "sys_platform == 'darwin'" },
     { name = "pyyaml" },
     { name = "textual" },
@@ -306,6 +307,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "click", specifier = ">=8.1" },
     { name = "pyobjc-framework-eventkit", marker = "sys_platform == 'darwin'", specifier = ">=10.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "textual", specifier = ">=0.80" },
