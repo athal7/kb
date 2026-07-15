@@ -11,6 +11,7 @@ dependencies = [
     "click>=8.1",
     "textual>=0.80",
     "pyyaml>=6.0",
+    "pydantic>=2.0",
     "pyobjc-framework-EventKit>=10.0 ; sys_platform == 'darwin'",
 ]
 
