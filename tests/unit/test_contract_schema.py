@@ -10,11 +10,11 @@ from kb.contract.schema import contract_schema
 
 
 class DescribeContractSchema:
-    def it_returns_a_dict_with_schemas_for_response_and_profile(self):
+    def it_returns_a_discriminated_union_schema_for_the_response_envelope(self):
         schema = contract_schema()
 
-        assert schema["ContractResponse"]["type"] == "object"
-        assert "properties" in schema["ContractResponse"]
+        assert "oneOf" in schema["ContractResponse"]
+        assert schema["ContractResponse"]["discriminator"]["propertyName"] == "ok"
         assert schema["Profile"]["type"] == "object"
         assert "properties" in schema["Profile"]
 

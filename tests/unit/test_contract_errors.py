@@ -39,6 +39,46 @@ class DescribeContractError:
         assert error.retryable is True
 
 
+class DescribeContractErrorPathValidation:
+    def it_accepts_the_empty_string_as_the_document_root(self):
+        error = ContractError(code="validation.invariant", message="x", path="", retryable=False)
+
+        assert error.path == ""
+
+    def it_accepts_a_pointer_with_a_leading_slash(self):
+        error = ContractError(
+            code="validation.invariant", message="x", path="/frontmatter/status", retryable=False
+        )
+
+        assert error.path == "/frontmatter/status"
+
+    def it_accepts_a_numeric_array_index_segment(self):
+        error = ContractError(
+            code="validation.invariant", message="x", path="/items/0", retryable=False
+        )
+
+        assert error.path == "/items/0"
+
+    def it_accepts_the_tilde_escape_sequences_for_tilde_and_slash(self):
+        error = ContractError(
+            code="validation.invariant", message="x", path="/a~0b/c~1d", retryable=False
+        )
+
+        assert error.path == "/a~0b/c~1d"
+
+    def it_rejects_a_path_missing_its_leading_slash(self):
+        with pytest.raises(ValidationError):
+            ContractError(
+                code="validation.invariant", message="x", path="data/body", retryable=False
+            )
+
+    def it_rejects_an_invalid_tilde_escape_sequence(self):
+        with pytest.raises(ValidationError):
+            ContractError(
+                code="validation.invariant", message="x", path="/items/~2", retryable=False
+            )
+
+
 class DescribeContractErrorFactories:
     def it_builds_a_not_found_error_with_sensible_defaults(self):
         error = ContractError.not_found(path="/id", message="no such person")

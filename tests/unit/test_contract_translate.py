@@ -8,7 +8,30 @@ domain-model/spec.md says the Contract is the only public surface, so nothing ou
 from kb.contract.schema_pack import Profile
 from kb.contract.translate import person_to_profile, project_to_profile
 from kb.core.markdown import Section as CoreSection
-from kb.core.models import Person, Project, Wikilink
+from kb.core.models import (
+    EntityKind,
+    EntityRef,
+    Person,
+    Project,
+    Resolution,
+    ResolutionStatus,
+    Wikilink,
+)
+
+
+class _FakeResolver:
+    """A resolver stub satisfying the same `resolve_wikilink` shape `VaultIndex`
+    exposes, without needing a full vault scan to test the translation seam.
+    """
+
+    def __init__(self, entities: dict[tuple[str, EntityKind], EntityRef]) -> None:
+        self._entities = entities
+
+    def resolve_wikilink(self, target: str, kind: EntityKind) -> Resolution:
+        entity = self._entities.get((target, kind))
+        if entity is None:
+            return Resolution(ResolutionStatus.UNRESOLVED)
+        return Resolution(ResolutionStatus.RESOLVED, entity=entity)
 
 
 class DescribePersonToProfile:
@@ -25,7 +48,7 @@ class DescribePersonToProfile:
             sections=[],
         )
 
-        profile = person_to_profile(person)
+        profile = person_to_profile(person, _FakeResolver({}))
 
         assert profile.ref != person.file
         assert not profile.ref.endswith(".md")
@@ -44,8 +67,15 @@ class DescribePersonToProfile:
             ],
             sections=[CoreSection(heading="Current", level=2, lines=["ML researcher"])],
         )
+        resolver = _FakeResolver(
+            {
+                ("Firewall", EntityKind.PROJECT): EntityRef(
+                    canonical="firewall", kind=EntityKind.PROJECT, file="projects/firewall.md"
+                )
+            }
+        )
 
-        profile = person_to_profile(person)
+        profile = person_to_profile(person, resolver)
 
         assert isinstance(profile, Profile)
         assert profile.kind == "person"
@@ -58,7 +88,7 @@ class DescribePersonToProfile:
         assert profile.sections[0].heading == "Current"
         assert profile.sections[0].body == "ML researcher"
         assert [r.model_dump() for r in profile.relationships] == [
-            {"name": "projects", "target": "Firewall"}
+            {"name": "projects", "target": "projects/firewall"}
         ]
 
     def it_translates_a_person_with_no_project_links_to_no_relationships(self):
@@ -74,10 +104,33 @@ class DescribePersonToProfile:
             sections=[],
         )
 
-        profile = person_to_profile(person)
+        profile = person_to_profile(person, _FakeResolver({}))
 
         assert profile.relationships == []
         assert profile.sections == []
+
+    def it_falls_back_to_the_raw_wikilink_text_when_a_link_does_not_resolve(self):
+        person = Person(
+            file="people/andre.md",
+            frontmatter={},
+            email=None,
+            team=None,
+            title=None,
+            slack_id=None,
+            aliases=[],
+            project_links=[
+                Wikilink(
+                    raw_text="Some Dead Link", source_file="people/andre.md", source_line=1
+                )
+            ],
+            sections=[],
+        )
+
+        profile = person_to_profile(person, _FakeResolver({}))
+
+        assert [r.model_dump() for r in profile.relationships] == [
+            {"name": "projects", "target": "Some Dead Link"}
+        ]
 
 
 class DescribeProjectToProfile:
@@ -101,8 +154,20 @@ class DescribeProjectToProfile:
             ],
             sections=[CoreSection(heading="Status", level=2, lines=["on track"])],
         )
+        resolver = _FakeResolver(
+            {
+                ("Odin", EntityKind.PRODUCT): EntityRef(
+                    canonical="odin", kind=EntityKind.PRODUCT, file="products/odin.md"
+                ),
+                ("Kate Silverstein", EntityKind.PERSON): EntityRef(
+                    canonical="ksilverstein",
+                    kind=EntityKind.PERSON,
+                    file="people/ksilverstein.md",
+                ),
+            }
+        )
 
-        profile = project_to_profile(project)
+        profile = project_to_profile(project, resolver)
 
         assert isinstance(profile, Profile)
         assert profile.kind == "project"
@@ -113,10 +178,10 @@ class DescribeProjectToProfile:
         assert profile.fields["aliases"] == ["Firewall"]
         assert profile.sections[0].heading == "Status"
         assert profile.sections[0].body == "on track"
-        assert {"name": "product", "target": "Odin"} in [
+        assert {"name": "product", "target": "products/odin"} in [
             r.model_dump() for r in profile.relationships
         ]
-        assert {"name": "people", "target": "Kate Silverstein"} in [
+        assert {"name": "people", "target": "people/ksilverstein"} in [
             r.model_dump() for r in profile.relationships
         ]
 
@@ -133,6 +198,6 @@ class DescribeProjectToProfile:
             sections=[],
         )
 
-        profile = project_to_profile(project)
+        profile = project_to_profile(project, _FakeResolver({}))
 
         assert profile.relationships == []

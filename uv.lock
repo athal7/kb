@@ -318,7 +318,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1" },
-    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pydantic", specifier = ">=2.12" },
     { name = "pyobjc-framework-eventkit", marker = "sys_platform == 'darwin'", specifier = ">=10.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "textual", specifier = ">=0.80" },

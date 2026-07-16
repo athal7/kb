@@ -7,7 +7,7 @@ typing lives, translated from the private engine-internal dataclasses in kb.core
 
 from __future__ import annotations
 
-from kb.contract.envelope import ContractResponse, ContractWarning
+from kb.contract.envelope import ContractResponse, ContractWarning, ErrorResponse, SuccessResponse
 from kb.contract.errors import ContractError
 from kb.contract.schema import contract_schema
 from kb.contract.schema_pack import (
@@ -23,16 +23,18 @@ from kb.contract.version import CONTRACT_VERSION
 
 __all__ = [
     "CONTRACT_VERSION",
+    "ContractError",
     "ContractResponse",
     "ContractWarning",
-    "ContractError",
+    "Document",
+    "ErrorResponse",
+    "LedgerEntry",
     "Profile",
-    "Section",
     "Relationship",
     "ResolutionMapEntry",
-    "LedgerEntry",
-    "Document",
+    "Section",
+    "SuccessResponse",
+    "contract_schema",
     "person_to_profile",
     "project_to_profile",
-    "contract_schema",
 ]

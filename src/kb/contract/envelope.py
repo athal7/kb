@@ -5,21 +5,32 @@ one JSON object with `contract_version`, `ok`, and either `data` (on success) or
 `error` (on failure), plus an always-present `warnings` array (empty when there are
 none).
 
-`ContractResponse` is generic over its `data` payload (PEP 695 type parameter syntax,
-`class ContractResponse[T]`) rather than typed `Any`, so each Engine op can declare
-its own response type (e.g. `ContractResponse[Profile]`) and get real type-checking on
-`.data` at call sites, instead of every caller re-casting an `Any`. The cost is that
-callers must parametrize the generic explicitly (`ContractResponse[Profile]`, not bare
-`ContractResponse`) — an acceptable tradeoff since every real endpoint has one
-concrete payload shape. Pydantic has full runtime support for PEP 695 generics since
-v2.11 (this project pins pydantic>=2.0 but resolves to 2.13+); the old
-`Generic[T]`-subclass spelling is equivalent at runtime but PEP 695 is what ruff's
-UP046 expects on a py312-targeted codebase.
+A single flat model with `ok: bool` and both `data`/`error` typed `X | None` can only
+enforce "ok=True implies data present, error absent" with a runtime `model_validator`
+— its `.model_json_schema()` still describes `data`/`error` as two independently
+optional fields with no relationship between them, so a schema consumer (e.g. a future
+`kb contract schema`) can't see the constraint at all. Modeling the two outcomes as
+separate variants — `SuccessResponse[T]` (`ok: Literal[True]`, required `data`, no
+`error` field) and `ErrorResponse` (`ok: Literal[False]`, required `error`, no `data`
+field) — joined by a `Field(discriminator="ok")` union makes the invariant part of the
+type itself: there is no longer an invalid combination of fields to reject, so no
+`model_validator` is needed, and pydantic renders the union as a JSON Schema `oneOf`
+with a discriminator mapping keyed by `ok`.
+
+`SuccessResponse` is generic over its `data` payload (PEP 695 type parameter syntax,
+`class SuccessResponse[T]`) rather than typed `Any`, so each Engine op can declare its
+own response type (e.g. `ContractResponse[Profile]`) and get real type-checking on
+`.data` at call sites, instead of every caller re-casting an `Any`. `ContractResponse`
+itself is a PEP 695 generic type alias over the discriminated union, not a class — call
+sites construct `SuccessResponse[Profile](data=...)` or `ErrorResponse(error=...)`
+directly and use `ContractResponse[Profile]` only as the annotation/schema type.
 """
 
 from __future__ import annotations
 
-from pydantic import BaseModel, model_validator
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from kb.contract.errors import ContractError
 from kb.contract.version import CONTRACT_VERSION
@@ -37,23 +48,31 @@ class ContractWarning(BaseModel):
     message: str = ""
 
 
-class ContractResponse[T](BaseModel):
+class _ContractResponseBase(BaseModel):
+    """Fields every Contract response carries regardless of success or failure.
+
+    `extra="forbid"` matters here specifically: without it, a caller building
+    `SuccessResponse(data=..., error=...)` would have the stray `error` kwarg silently
+    dropped rather than rejected, which would quietly defeat the point of splitting
+    the envelope into variants in the first place.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     contract_version: str = CONTRACT_VERSION
-    ok: bool
-    data: T | None = None
-    error: ContractError | None = None
     warnings: list[ContractWarning] = []
 
-    @model_validator(mode="after")
-    def _enforce_ok_data_error_invariant(self) -> ContractResponse[T]:
-        if self.ok:
-            if self.data is None:
-                raise ValueError("ok=True responses must include data")
-            if self.error is not None:
-                raise ValueError("ok=True responses must not include error")
-        else:
-            if self.error is None:
-                raise ValueError("ok=False responses must include error")
-            if self.data is not None:
-                raise ValueError("ok=False responses must not include data")
-        return self
+
+class SuccessResponse[T](_ContractResponseBase):
+    ok: Literal[True] = True
+    data: T
+
+
+class ErrorResponse(_ContractResponseBase):
+    ok: Literal[False] = False
+    error: ContractError
+
+
+type ContractResponse[T] = Annotated[
+    SuccessResponse[T] | ErrorResponse, Field(discriminator="ok")
+]
