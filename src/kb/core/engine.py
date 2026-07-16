@@ -26,6 +26,17 @@ def _fold(name: str) -> str:
     return name.strip().casefold()
 
 
+def _is_pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    import os
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
 def get_inverse_relationship(kind: str, rel_name: str) -> tuple[str, str] | None:
     """Returns (inverse_kind, inverse_rel_name) for bidirectional relationship sync."""
     if kind == "person" and rel_name == "projects":
@@ -442,32 +453,38 @@ class Engine:
         """Perform an atomic validated write of a Profile, maintaining all invariants."""
         import os
         import time
+        import uuid
         lock_path = self.kb_root / ".kb.lock"
+        current_token = f"{os.getpid()}:{uuid.uuid4().hex}"
 
-        # Crash-safe stale lock reclamation: if the lock is older than 10 seconds, reclaim it.
-        if lock_path.is_file():
-            try:
-                mtime = lock_path.stat().st_mtime
-                if time.time() - mtime > 10:
-                    lock_path.unlink()
-            except Exception:
-                pass
+        def reclaim_stale_lock():
+            if lock_path.is_file():
+                try:
+                    content = lock_path.read_text(encoding="utf-8").strip()
+                    parts = content.split(":")
+                    if len(parts) == 2:
+                        pid_str, _ = parts
+                        pid = int(pid_str)
+                        if not _is_pid_alive(pid):
+                            lock_path.unlink()
+                        else:
+                            # Reclaim if file is > 60 seconds old
+                            mtime = lock_path.stat().st_mtime
+                            if time.time() - mtime > 60:
+                                lock_path.unlink()
+                except Exception:
+                    pass
+
+        reclaim_stale_lock()
 
         acquired = False
         lock_fd = None
         for _ in range(50):  # retry up to 5 seconds
-            if lock_path.is_file():
-                try:
-                    mtime = lock_path.stat().st_mtime
-                    if time.time() - mtime > 10:
-                        lock_path.unlink()
-                except Exception:
-                    pass
-
+            reclaim_stale_lock()
             try:
                 fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                 lock_fd = os.fdopen(fd, "w")
-                lock_fd.write(str(os.getpid()))
+                lock_fd.write(current_token)
                 lock_fd.flush()
                 acquired = True
                 break
@@ -483,7 +500,15 @@ class Engine:
             )
 
         try:
-            self.reload()
+            try:
+                self.reload()
+            except Exception as reload_err:
+                return ErrorResponse(
+                    error=ContractError.io(
+                        path="",
+                        message=f"Failed to reload index before write: {reload_err}"
+                    )
+                )
             return self._locked_write_profile(profile)
         finally:
             if lock_fd:
@@ -491,9 +516,12 @@ class Engine:
                     lock_fd.close()
                 except Exception:
                     pass
+            # Only release the lock acquired by this invocation
             if lock_path.is_file():
                 try:
-                    lock_path.unlink()
+                    content = lock_path.read_text(encoding="utf-8").strip()
+                    if content == current_token:
+                        lock_path.unlink()
                 except Exception:
                     pass
 
