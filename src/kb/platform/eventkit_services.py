@@ -17,7 +17,6 @@ outside AppKit's run loop use in practice.
 
 from __future__ import annotations
 
-import sys
 import threading
 import time
 from datetime import datetime, timedelta
@@ -42,10 +41,6 @@ except ImportError:
             def authorizationStatusForEntityType_(cls, entity_type):
                 return 0  # EKAuthorizationStatusNotDetermined
     EventKit = DummyEventKit  # type: ignore
-if sys.platform == "darwin":
-    import EventKit
-else:
-    EventKit = None  # type: ignore[assignment]
 
 from kb.platform.models import AccessDeniedError, AccessState, CalendarEvent, Reminder
 
@@ -54,15 +49,12 @@ _FETCH_TIMEOUT_SECONDS = 10
 # EKAuthorizationStatusWriteOnly and any future status EventKit adds aren't in
 # this map and fall through to DENIED in _map_authorization_status — a status
 # that isn't known to grant full read access shouldn't be treated as GRANTED.
-if EventKit is not None:
-    _AUTHORIZATION_STATUS_TO_ACCESS_STATE = {
-        EventKit.EKAuthorizationStatusNotDetermined: AccessState.NOT_DETERMINED,
-        EventKit.EKAuthorizationStatusRestricted: AccessState.RESTRICTED,
-        EventKit.EKAuthorizationStatusDenied: AccessState.DENIED,
-        EventKit.EKAuthorizationStatusFullAccess: AccessState.GRANTED,
-    }
-else:
-    _AUTHORIZATION_STATUS_TO_ACCESS_STATE = {}
+_AUTHORIZATION_STATUS_TO_ACCESS_STATE = {
+    EventKit.EKAuthorizationStatusNotDetermined: AccessState.NOT_DETERMINED,
+    EventKit.EKAuthorizationStatusRestricted: AccessState.RESTRICTED,
+    EventKit.EKAuthorizationStatusDenied: AccessState.DENIED,
+    EventKit.EKAuthorizationStatusFullAccess: AccessState.GRANTED,
+}
 
 
 def _map_authorization_status(raw_status: int) -> AccessState:

@@ -11,13 +11,9 @@ duck-typed fakes, no framework calls involved.
 
 from __future__ import annotations
 
-import sys
 from datetime import datetime
 
 import pytest
-
-if sys.platform != "darwin":
-    pytest.skip("EventKit tests require macOS (pyobjc)", allow_module_level=True)
 
 from kb.platform.eventkit_services import (
     EventKitCalendarService,
