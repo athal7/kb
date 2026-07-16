@@ -12,7 +12,7 @@ dependencies = [
     "textual>=0.80",
     "pyyaml>=6.0",
     "pydantic>=2.12",
-    "pyobjc-framework-EventKit>=10.0 ; sys_platform == 'darwin'",
+    "pyobjc-framework-EventKit>=12.2.1 ; sys_platform == 'darwin'",
 ]
 
 [project.scripts]
