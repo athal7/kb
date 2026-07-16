@@ -19,7 +19,7 @@ UP046 expects on a py312-targeted codebase.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from kb.contract.errors import ContractError
 from kb.contract.version import CONTRACT_VERSION
@@ -43,3 +43,17 @@ class ContractResponse[T](BaseModel):
     data: T | None = None
     error: ContractError | None = None
     warnings: list[ContractWarning] = []
+
+    @model_validator(mode="after")
+    def _enforce_ok_data_error_invariant(self) -> ContractResponse[T]:
+        if self.ok:
+            if self.data is None:
+                raise ValueError("ok=True responses must include data")
+            if self.error is not None:
+                raise ValueError("ok=True responses must not include error")
+        else:
+            if self.error is None:
+                raise ValueError("ok=False responses must include error")
+            if self.data is not None:
+                raise ValueError("ok=False responses must not include data")
+        return self

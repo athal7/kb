@@ -54,6 +54,22 @@ class DescribeContractErrorFactories:
         assert error.code == "validation.invariant"
         assert error.retryable is False
 
+    def it_builds_a_conflict_error_with_sensible_defaults(self):
+        error = ContractError.conflict(path="/aliases/1", message="alias already claimed")
+
+        assert error.code == "conflict.duplicate"
+        assert error.retryable is False
+        assert error.path == "/aliases/1"
+        assert error.message == "alias already claimed"
+
+    def it_builds_a_contract_error_with_sensible_defaults(self):
+        error = ContractError.contract(path="/contract_version", message="unsupported version")
+
+        assert error.code == "contract.unsupported_version"
+        assert error.retryable is False
+        assert error.path == "/contract_version"
+        assert error.message == "unsupported version"
+
     def it_builds_an_io_error_that_is_retryable_by_default(self):
         error = ContractError.io(path="/store", message="lock contention")
 

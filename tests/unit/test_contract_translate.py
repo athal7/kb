@@ -12,6 +12,24 @@ from kb.core.models import Person, Project, Wikilink
 
 
 class DescribePersonToProfile:
+    def it_gives_the_profile_a_ref_that_is_not_the_persons_file_path(self):
+        person = Person(
+            file="people/ksilverstein.md",
+            frontmatter={},
+            email=None,
+            team=None,
+            title=None,
+            slack_id=None,
+            aliases=[],
+            project_links=[],
+            sections=[],
+        )
+
+        profile = person_to_profile(person)
+
+        assert profile.ref != person.file
+        assert not profile.ref.endswith(".md")
+
     def it_translates_a_person_into_a_profile_with_matching_field_values(self):
         person = Person(
             file="people/ksilverstein.md",
@@ -31,7 +49,7 @@ class DescribePersonToProfile:
 
         assert isinstance(profile, Profile)
         assert profile.kind == "person"
-        assert profile.ref == "people/ksilverstein.md"
+        assert profile.ref == "people/ksilverstein"
         assert profile.fields["email"] == "k@example.com"
         assert profile.fields["team"] == "Research"
         assert profile.fields["title"] == "ML Researcher"
@@ -88,7 +106,7 @@ class DescribeProjectToProfile:
 
         assert isinstance(profile, Profile)
         assert profile.kind == "project"
-        assert profile.ref == "projects/firewall.md"
+        assert profile.ref == "projects/firewall"
         assert profile.fields["status"] == "active"
         assert profile.fields["github"] == "athal7/firewall"
         assert profile.fields["linear"] == "FIRE"

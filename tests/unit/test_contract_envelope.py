@@ -5,8 +5,12 @@ object with contract_version, ok, and either data (success) or error (failure), 
 an always-present warnings array.
 """
 
-from kb.contract.envelope import CONTRACT_VERSION, ContractResponse, ContractWarning
+import pytest
+from pydantic import ValidationError
+
+from kb.contract.envelope import ContractResponse, ContractWarning
 from kb.contract.errors import ContractError
+from kb.contract.version import CONTRACT_VERSION
 
 
 class DescribeContractResponse:
@@ -47,3 +51,15 @@ class DescribeContractResponse:
 
         assert response.warnings == [warning]
         assert ContractResponse[dict](ok=True, data={}).warnings == []
+
+    def it_rejects_ok_true_with_an_error_set(self):
+        error = ContractError(code="io.transient", message="x", path="/x", retryable=True)
+
+        with pytest.raises(ValidationError):
+            ContractResponse[dict](ok=True, data={"name": "Kate"}, error=error)
+
+    def it_rejects_ok_false_with_data_set(self):
+        error = ContractError(code="io.transient", message="x", path="/x", retryable=True)
+
+        with pytest.raises(ValidationError):
+            ContractResponse[dict](ok=False, data={"name": "Kate"}, error=error)
