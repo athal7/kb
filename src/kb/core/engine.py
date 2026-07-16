@@ -443,9 +443,27 @@ class Engine:
         import os
         import time
         lock_path = self.kb_root / ".kb.lock"
+
+        # Crash-safe stale lock reclamation: if the lock is older than 10 seconds, reclaim it.
+        if lock_path.is_file():
+            try:
+                mtime = lock_path.stat().st_mtime
+                if time.time() - mtime > 10:
+                    lock_path.unlink()
+            except Exception:
+                pass
+
         acquired = False
         lock_fd = None
         for _ in range(50):  # retry up to 5 seconds
+            if lock_path.is_file():
+                try:
+                    mtime = lock_path.stat().st_mtime
+                    if time.time() - mtime > 10:
+                        lock_path.unlink()
+                except Exception:
+                    pass
+
             try:
                 fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                 lock_fd = os.fdopen(fd, "w")
@@ -465,6 +483,7 @@ class Engine:
             )
 
         try:
+            self.reload()
             return self._locked_write_profile(profile)
         finally:
             if lock_fd:
