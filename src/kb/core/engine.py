@@ -137,7 +137,11 @@ class Engine:
                     try:
                         content = md_file.read_text(encoding="utf-8")
                         rel_path = md_file.relative_to(self.kb_root).as_posix()
-                        spec_slug = PurePosixPath(rel_path).with_suffix("").as_posix()
+                        spec_slug = (
+                            PurePosixPath(md_file.relative_to(openspec_dir))
+                            .with_suffix("")
+                            .as_posix()
+                        )
                         documents.append(
                             Document(
                                 namespace="openspec",
@@ -436,6 +440,45 @@ class Engine:
 
     def write_profile(self, profile: Profile) -> ContractResponse[None]:
         """Perform an atomic validated write of a Profile, maintaining all invariants."""
+        import os
+        import time
+        lock_path = self.kb_root / ".kb.lock"
+        acquired = False
+        lock_fd = None
+        for _ in range(50):  # retry up to 5 seconds
+            try:
+                fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                lock_fd = os.fdopen(fd, "w")
+                lock_fd.write(str(os.getpid()))
+                lock_fd.flush()
+                acquired = True
+                break
+            except FileExistsError:
+                time.sleep(0.1)
+
+        if not acquired:
+            return ErrorResponse(
+                error=ContractError.io(
+                    path="",
+                    message="Could not acquire write lock (transaction in progress)."
+                )
+            )
+
+        try:
+            return self._locked_write_profile(profile)
+        finally:
+            if lock_fd:
+                try:
+                    lock_fd.close()
+                except Exception:
+                    pass
+            if lock_path.is_file():
+                try:
+                    lock_path.unlink()
+                except Exception:
+                    pass
+
+    def _locked_write_profile(self, profile: Profile) -> ContractResponse[None]:
         # --- Pre-commit Validation ---
         # 1. Section caps: 'Current' section has at most 5 items
         import re
@@ -482,6 +525,16 @@ class Engine:
 
         # Validate slug safety and path traversal
         plural = _KIND_TO_PLURAL.get(profile.kind, f"{profile.kind}s")
+        expected_ref = f"{plural}/{slug}"
+        if profile.ref != expected_ref:
+            return ErrorResponse(
+                error=ContractError.validation(
+                    path="/ref",
+                    message=f"Profile ref must be '{expected_ref}' for kind '{profile.kind}'.",
+                    code="validation.invariant"
+                )
+            )
+
         collection_dir = (self.kb_root / plural).resolve()
         import re
         if not re.match(r"^[a-z0-9\-]+$", slug):
@@ -664,16 +717,19 @@ class Engine:
         # --- Commit All Changes Atomically ---
         try:
             # First write to temp files, then rename to make it fully atomic
+            # Use transaction-unique temporary paths to prevent concurrent conflicts
+            import uuid
+            txn_id = uuid.uuid4().hex
             written_temp_paths: list[tuple[Path, Path]] = []
             for final_path, content in files_to_write.items():
                 final_path.parent.mkdir(parents=True, exist_ok=True)
-                temp_path = final_path.with_suffix(f"{final_path.suffix}.tmp")
+                temp_path = final_path.with_suffix(f"{final_path.suffix}.{txn_id}.tmp")
                 temp_path.write_text(content, encoding="utf-8")
                 written_temp_paths.append((temp_path, final_path))
 
             # Store original state for rollback journal
             original_contents: dict[Path, str | None] = {}
-            for temp_path, final_path in written_temp_paths:
+            for temp, final_path in written_temp_paths:
                 if final_path.is_file():
                     original_contents[final_path] = final_path.read_text(encoding="utf-8")
                 else:
