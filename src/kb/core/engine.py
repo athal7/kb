@@ -10,13 +10,14 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 from typing import Any
+
 import yaml
 
-from kb.contract.envelope import SuccessResponse, ErrorResponse, ContractResponse
+from kb.contract.envelope import ContractResponse, ErrorResponse, SuccessResponse
 from kb.contract.errors import ContractError
-from kb.contract.query import QueryRequest, QueryHit, QueryResult
-from kb.contract.schema_pack import Profile, Relationship, Section, Document
-from kb.contract.translate import person_to_profile, project_to_profile, product_to_profile
+from kb.contract.query import QueryHit, QueryRequest, QueryResult
+from kb.contract.schema_pack import Document, Profile, Relationship
+from kb.contract.translate import person_to_profile, product_to_profile, project_to_profile
 from kb.core.index import VaultIndex
 from kb.core.models import EntityKind
 
@@ -69,8 +70,17 @@ class Engine:
 
     def query(self, request: QueryRequest) -> ContractResponse[QueryResult]:
         """Expose a query/search operation across profiles and documents."""
+        if request.limit is not None and request.limit < 0:
+            return ErrorResponse(
+                error=ContractError.validation(
+                    path="/limit",
+                    message="Limit parameter must be non-negative.",
+                    code="validation.invariant"
+                )
+            )
         try:
             hits: list[QueryHit] = []
+            query_warnings: list[ContractWarning] = []
 
             # 1. Collect all Profiles
             profiles: list[Profile] = []
@@ -96,7 +106,7 @@ class Engine:
                         namespace="journal",
                         kind="journal",
                         body=body,
-                        provenance={"date": j.date}
+                        provenance={"date": j.date, "ref": f"journal/{j.date}"}
                     )
                 )
             # Decisions
@@ -107,12 +117,17 @@ class Engine:
                         body_parts.append(f"## {s.heading}")
                     body_parts.append(s.body)
                 body = "\n".join(body_parts)
+                dec_slug = PurePosixPath(d.file).with_suffix("").name
                 documents.append(
                     Document(
                         namespace="decisions",
                         kind="decision",
                         body=body,
-                        provenance={"is_readonly": d.is_readonly, "file": d.file}
+                        provenance={
+                            "is_readonly": d.is_readonly,
+                            "file": d.file,
+                            "ref": f"decisions/{dec_slug}",
+                        }
                     )
                 )
             # Openspec specs (under kb_root/openspec recursively if exists)
@@ -122,16 +137,23 @@ class Engine:
                     try:
                         content = md_file.read_text(encoding="utf-8")
                         rel_path = md_file.relative_to(self.kb_root).as_posix()
+                        spec_slug = PurePosixPath(rel_path).with_suffix("").as_posix()
                         documents.append(
                             Document(
                                 namespace="openspec",
                                 kind="spec",
                                 body=content,
-                                provenance={"path": rel_path}
+                                provenance={"path": rel_path, "ref": f"openspec/{spec_slug}"}
                             )
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        from kb.contract.envelope import ContractWarning
+                        query_warnings.append(
+                            ContractWarning(
+                                code="io.read_failure",
+                                message=f"Failed to read/decode OpenSpec file '{md_file}': {e}"
+                            )
+                        )
 
             # 3. Match Profiles
             for profile in profiles:
@@ -148,18 +170,27 @@ class Engine:
                     # Check if profile has relationship pointing to related_to
                     for rel in profile.relationships:
                         if rel.target.lower() == request.related_to.lower():
-                            if not request.relationship or rel.name.lower() == request.relationship.lower():
+                            if (
+                                not request.relationship
+                                or rel.name.lower() == request.relationship.lower()
+                            ):
                                 rel_matched = True
                                 break
                     # Check if starting profile has relationship pointing to this candidate
                     if not rel_matched:
                         starting_ref = request.related_to
                         # Find starting profile
-                        starting_profile = next((p for p in profiles if p.ref.lower() == starting_ref.lower()), None)
+                        starting_profile = next(
+                            (p for p in profiles if p.ref.lower() == starting_ref.lower()),
+                            None,
+                        )
                         if starting_profile:
                             for rel in starting_profile.relationships:
                                 if rel.target.lower() == profile.ref.lower():
-                                    if not request.relationship or rel.name.lower() == request.relationship.lower():
+                                    if (
+                                        not request.relationship
+                                        or rel.name.lower() == request.relationship.lower()
+                                    ):
                                         rel_matched = True
                                         break
                     if not rel_matched:
@@ -189,7 +220,9 @@ class Engine:
                     for k in [EntityKind.PERSON, EntityKind.PROJECT, EntityKind.PRODUCT]:
                         res = self._index.resolve_wikilink(request.text, k)
                         if res.entity and res.entity.file:
-                            canonical_ref = PurePosixPath(res.entity.file).with_suffix("").as_posix()
+                            canonical_ref = (
+                                PurePosixPath(res.entity.file).with_suffix("").as_posix()
+                            )
                             if canonical_ref.lower() == profile.ref.lower():
                                 text_matched = True
                                 matched_in = "resolution-map"
@@ -326,9 +359,10 @@ class Engine:
                     if not text_matched:
                         continue
 
+                    doc_ref = (doc.provenance or {}).get("ref") or doc.namespace
                     hits.append(
                         QueryHit(
-                            ref=doc.namespace,
+                            ref=doc_ref,
                             collection=doc.namespace,
                             snippet=snippet,
                             matched_in=matched_in,
@@ -337,9 +371,10 @@ class Engine:
                     )
                 else:
                     # No text search parameter
+                    doc_ref = (doc.provenance or {}).get("ref") or doc.namespace
                     hits.append(
                         QueryHit(
-                            ref=doc.namespace,
+                            ref=doc_ref,
                             collection=doc.namespace,
                             snippet=doc.body[:150].strip(),
                             matched_in="body",
@@ -355,6 +390,7 @@ class Engine:
                 truncated = True
 
             return SuccessResponse[QueryResult](
+                warnings=query_warnings,
                 data=QueryResult(hits=hits, total=total, truncated=truncated)
             )
 
@@ -402,9 +438,11 @@ class Engine:
         """Perform an atomic validated write of a Profile, maintaining all invariants."""
         # --- Pre-commit Validation ---
         # 1. Section caps: 'Current' section has at most 5 items
+        import re
+        bullet_pattern = re.compile(r"^\s*([\-*+]|\d+[\.)])(\s|$)")
         for sec in profile.sections:
             if sec.heading and sec.heading.lower() == "current":
-                bullets = [line for line in sec.body.split("\n") if line.strip().startswith(("-", "*"))]
+                bullets = [line for line in sec.body.split("\n") if bullet_pattern.match(line)]
                 if len(bullets) > 5:
                     return ErrorResponse(
                         error=ContractError.validation(
@@ -428,13 +466,47 @@ class Engine:
                 return ErrorResponse(
                     error=ContractError.validation(
                         path="/ref",
-                        message="Cannot save Profile: ref slug is empty and could not be derived from title",
+                        message=(
+                            "Cannot save Profile: ref slug is empty and "
+                            "could not be derived from title"
+                        ),
                         code="validation.invariant"
                     )
                 )
-            slug = title.strip().lower().replace(" ", "-")
+            import re
+            # Basic cleanup to form a candidate slug
+            slug = re.sub(r"[^a-zA-Z0-9\-]", "-", title.strip().lower()).replace(" ", "-")
+            slug = re.sub(r"-+", "-", slug).strip("-")
             plural = _KIND_TO_PLURAL.get(profile.kind, f"{profile.kind}s")
             profile.ref = f"{plural}/{slug}"
+
+        # Validate slug safety and path traversal
+        plural = _KIND_TO_PLURAL.get(profile.kind, f"{profile.kind}s")
+        collection_dir = (self.kb_root / plural).resolve()
+        import re
+        if not re.match(r"^[a-z0-9\-]+$", slug):
+            return ErrorResponse(
+                error=ContractError.validation(
+                    path="/ref",
+                    message=(
+                        f"Invalid slug characters in '{slug}'. Only lowercase "
+                        "letters, numbers, and hyphens are allowed."
+                    ),
+                    code="validation.invariant"
+                )
+            )
+
+        self_file_path = (collection_dir / f"{slug}.md").resolve()
+        try:
+            self_file_path.relative_to(collection_dir)
+        except ValueError:
+            return ErrorResponse(
+                error=ContractError.validation(
+                    path="/ref",
+                    message="Path traversal detected or file is outside the collection directory.",
+                    code="validation.invariant"
+                )
+            )
 
         # 3. Simulate and gather all writes
         # To make it atomic, we compute all file updates in-memory and write them all together.
@@ -442,8 +514,6 @@ class Engine:
 
         # Self markdown
         self_md_content = self._serialize_profile_to_markdown(profile, slug)
-        plural = _KIND_TO_PLURAL.get(profile.kind, f"{profile.kind}s")
-        self_file_path = self.kb_root / plural / f"{slug}.md"
         files_to_write[self_file_path] = self_md_content
 
         # Bidirectional relationship sync
@@ -460,7 +530,8 @@ class Engine:
         added_rels = new_rels - old_rels
         removed_rels = old_rels - new_rels
 
-        # Track loaded target profiles in memory so we update them correctly if they are modified multiple times
+        # Track loaded target profiles in memory so we update them correctly
+        # if they are modified multiple times
         loaded_targets: dict[str, Profile] = {}
 
         def get_or_load_profile(ref: str) -> Profile | None:
@@ -491,23 +562,52 @@ class Engine:
             if inv:
                 inv_kind, inv_name = inv
                 target_profile = get_or_load_profile(rel_target)
-                if target_profile:
-                    # Add relationship pointing back to profile.ref if not exists
-                    exists = any(
-                        r.name == inv_name and r.target.lower() == profile.ref.lower()
-                        for r in target_profile.relationships
-                    )
-                    if not exists:
-                        target_profile.relationships.append(
-                            Relationship(name=inv_name, target=profile.ref)
+                if not target_profile:
+                    return ErrorResponse(
+                        error=ContractError.validation(
+                            path="/relationships",
+                            message=f"Target profile '{rel_target}' not found.",
+                            code="validation.invariant"
                         )
+                    )
+                if target_profile.kind != inv_kind:
+                    return ErrorResponse(
+                        error=ContractError.validation(
+                            path="/relationships",
+                            message=(
+                                f"Target profile '{rel_target}' has kind "
+                                f"'{target_profile.kind}', expected '{inv_kind}'."
+                            ),
+                            code="validation.invariant"
+                        )
+                    )
+                # Add relationship pointing back to profile.ref if not exists
+                exists = any(
+                    r.name == inv_name and r.target.lower() == profile.ref.lower()
+                    for r in target_profile.relationships
+                )
+                if not exists:
+                    target_profile.relationships.append(
+                        Relationship(name=inv_name, target=profile.ref)
+                    )
 
         # Re-serialize modified target profiles
         for target_ref, target_p in loaded_targets.items():
             t_slug = target_ref.split("/")[-1]
             t_md = self._serialize_profile_to_markdown(target_p, t_slug)
             t_plural = _KIND_TO_PLURAL.get(target_p.kind, f"{target_p.kind}s")
-            t_file_path = self.kb_root / t_plural / f"{t_slug}.md"
+            t_dir = (self.kb_root / t_plural).resolve()
+            t_file_path = (t_dir / f"{t_slug}.md").resolve()
+            try:
+                t_file_path.relative_to(t_dir)
+            except ValueError:
+                return ErrorResponse(
+                    error=ContractError.validation(
+                        path="/relationships",
+                        message="Path traversal detected on target relationship profile.",
+                        code="validation.invariant"
+                    )
+                )
             files_to_write[t_file_path] = t_md
 
         # Alias/resolution-map sync
@@ -518,8 +618,14 @@ class Engine:
             if map_path.is_file():
                 try:
                     map_data = json.loads(map_path.read_text(encoding="utf-8"))
-                except Exception:
-                    pass
+                except Exception as e:
+                    return ErrorResponse(
+                        error=ContractError.validation(
+                            path=f"/{map_filename}",
+                            message=f"Malformed resolution map JSON: {e}",
+                            code="validation.invariant"
+                        )
+                    )
 
             # Find display name or slug of profile to use as target
             title = profile.fields.get("name") or ""
@@ -565,8 +671,33 @@ class Engine:
                 temp_path.write_text(content, encoding="utf-8")
                 written_temp_paths.append((temp_path, final_path))
 
+            # Store original state for rollback journal
+            original_contents: dict[Path, str | None] = {}
             for temp_path, final_path in written_temp_paths:
-                os.replace(temp_path, final_path)
+                if final_path.is_file():
+                    original_contents[final_path] = final_path.read_text(encoding="utf-8")
+                else:
+                    original_contents[final_path] = None
+
+            successful_renames: list[Path] = []
+            try:
+                for temp_path, final_path in written_temp_paths:
+                    os.replace(temp_path, final_path)
+                    successful_renames.append(final_path)
+            except Exception as commit_err:
+                # Rollback transaction
+                for final_path in reversed(successful_renames):
+                    original = original_contents[final_path]
+                    if original is None:
+                        if final_path.is_file():
+                            final_path.unlink()
+                    else:
+                        final_path.write_text(original, encoding="utf-8")
+                # Clean up all temp files
+                for temp_path, final_path in written_temp_paths:
+                    if temp_path.is_file():
+                        temp_path.unlink()
+                raise commit_err
 
             # Reload index to reflect the written files immediately
             self.reload()
@@ -607,8 +738,7 @@ class Engine:
 
         # Keep/clear relationship lists to prevent duplications
         for rel_name in ["projects", "people", "product"]:
-            if rel_name in fm:
-                del fm[rel_name]
+            fm.pop(rel_name, None)
 
         # Reconstruct relationships in frontmatter
         if profile.kind == "person":
@@ -637,6 +767,16 @@ class Engine:
                 fm["people"] = people_links
             if product_link:
                 fm["product"] = product_link
+
+        elif profile.kind == "product":
+            project_links = []
+            for rel in profile.relationships:
+                if rel.name == "projects":
+                    t_slug = rel.target.split("/")[-1]
+                    display = self._index._titles.get(t_slug, t_slug.replace("-", " ").title())
+                    project_links.append(f"[[{display}]]")
+            if project_links:
+                fm["projects"] = project_links
 
         # Serialize frontmatter
         fm_yaml = yaml.safe_dump(fm, default_flow_style=False, sort_keys=False)

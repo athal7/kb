@@ -29,7 +29,15 @@ from typing import Protocol
 
 from kb.contract.schema_pack import Profile, Relationship, Section
 from kb.core.markdown import Section as CoreSection
-from kb.core.models import EntityKind, Person, Project, Resolution, ResolutionStatus, Wikilink
+from kb.core.models import (
+    EntityKind,
+    Person,
+    Product,
+    Project,
+    Resolution,
+    ResolutionStatus,
+    Wikilink,
+)
 
 
 class WikilinkResolver(Protocol):

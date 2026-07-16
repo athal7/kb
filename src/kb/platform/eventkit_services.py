@@ -37,6 +37,9 @@ except ImportError:
                 return cls()
             def init(self):
                 return self
+            @classmethod
+            def authorizationStatusForEntityType_(cls, entity_type):
+                return 0  # EKAuthorizationStatusNotDetermined
     EventKit = DummyEventKit  # type: ignore
 
 from kb.platform.models import AccessDeniedError, AccessState, CalendarEvent, Reminder

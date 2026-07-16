@@ -138,3 +138,13 @@ class DescribeCliQueryAndContract:
         schema = json.loads(result.output)
         assert "ContractResponse" in schema
         assert "Profile" in schema
+
+    def it_rejects_empty_json_string(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["query", "--json", ""])
+
+        assert result.exit_code != 0
+        data = json.loads(result.output)
+        assert data["ok"] is False
+        assert "Invalid QueryRequest JSON" in data["error"]["message"]

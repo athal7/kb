@@ -151,7 +151,13 @@ def people_show(ctx: click.Context, name: str) -> None:
 @cli.command("query")
 @click.option("-t", "--text", help="Substring/full-text search text")
 @click.option("-f", "--filter", "filters", multiple=True, help="Field filters, e.g. status=active")
-@click.option("-c", "--collection", "collections", multiple=True, help="Collection scope, e.g. people")
+@click.option(
+    "-c",
+    "--collection",
+    "collections",
+    multiple=True,
+    help="Collection scope, e.g. people",
+)
 @click.option("-r", "--related-to", help="Filter by relationship target ref")
 @click.option("--relationship", help="Filter by relationship name")
 @click.option("-l", "--limit", type=int, help="Limit number of results")
@@ -168,7 +174,7 @@ def query_cmd(
     json_str: str | None,
 ) -> None:
     """Query and search the KB vault."""
-    from kb.contract.query import QueryRequest, QueryFilter
+    from kb.contract.query import QueryFilter, QueryRequest
     from kb.core.engine import Engine
 
     try:
@@ -186,7 +192,7 @@ def query_cmd(
         click.echo(err.model_dump_json(indent=2 if sys.stdout.isatty() else None))
         ctx.exit(1)
 
-    if json_str:
+    if json_str is not None:
         try:
             req = QueryRequest.model_validate_json(json_str)
         except Exception as e:

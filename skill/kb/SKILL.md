@@ -15,17 +15,26 @@ gh skill install athal7/kb kb
 
 The CLI tool `kb` provides a clean, machine-parseable JSON interface on `stdout` by default. All logs, warnings, and diagnostics are sent to `stderr`.
 
-### Envelope Structure
+### Envelope Structure & Command Outputs
 
-Every command returning data wraps it in a standard JSON Contract Response envelope:
-```json
-{
-  "contract_version": "0.1.0",
-  "ok": true,
-  "warnings": [],
-  "data": { ... }
-}
-```
+The command-line output formats vary depending on the subcommand invoked:
+
+1. **Query and search operations (`kb query`):**
+   Always wrap their data payload inside the standard JSON Contract Response envelope:
+   ```json
+   {
+     "contract_version": "0.1.0",
+     "ok": true,
+     "warnings": [],
+     "data": { ... }
+   }
+   ```
+
+2. **Contract version introspection (`kb contract version`):**
+   Returns a clean, bare version string (e.g. `0.1.0`) on `stdout`.
+
+3. **Contract schema introspection (`kb contract schema`):**
+   Returns the raw contract JSON Schema as a standard JSON object.
 
 On error, the envelope is:
 ```json

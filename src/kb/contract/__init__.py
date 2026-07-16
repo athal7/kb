@@ -19,7 +19,7 @@ from kb.contract.schema_pack import (
     ResolutionMapEntry,
     Section,
 )
-from kb.contract.translate import person_to_profile, project_to_profile, product_to_profile
+from kb.contract.translate import person_to_profile, product_to_profile, project_to_profile
 from kb.contract.version import CONTRACT_VERSION
 
 __all__ = [

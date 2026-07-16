@@ -38,7 +38,7 @@ class DescribeContractPublicApi:
         assert QueryFilter and QueryHit and QueryRequest and QueryResult
 
     def it_exports_the_translate_functions(self):
-        from kb.contract import person_to_profile, project_to_profile, product_to_profile
+        from kb.contract import person_to_profile, product_to_profile, project_to_profile
 
         assert callable(person_to_profile)
         assert callable(project_to_profile)

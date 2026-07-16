@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import json
 import shutil
-import pytest
 from pathlib import Path
 
-from kb.contract.envelope import SuccessResponse, ErrorResponse
-from kb.contract.query import QueryRequest, QueryFilter
+import pytest
+
+from kb.contract.query import QueryFilter, QueryRequest
 from kb.contract.schema_pack import Profile, Relationship, Section
 from kb.core.engine import Engine
 
@@ -53,6 +53,8 @@ class DescribeEngineQuery:
         resp = engine.query(req)
 
         assert resp.ok is True
+        assert len(resp.data.hits) > 0
+        assert any(hit.ref == "projects/firewall" for hit in resp.data.hits)
         for hit in resp.data.hits:
             assert hit.collection == "projects"
             # Get the profile to assert the field
@@ -67,6 +69,8 @@ class DescribeEngineQuery:
         resp = engine.query(req)
 
         assert resp.ok is True
+        assert len(resp.data.hits) > 0
+        assert any(hit.ref.startswith("journal/") for hit in resp.data.hits)
         for hit in resp.data.hits:
             assert hit.collection == "journal"
 
@@ -140,25 +144,27 @@ class DescribeEngineWrites:
     def it_syncs_bidirectional_relationships_upon_write(self, temp_vault):
         engine = Engine(temp_vault)
 
-        # Stephen Golub (people/stephen-golub) has no relationship to projects/firewall initially
-        # Let's save Stephen Golub with a relationship pointing to projects/firewall
-        stephen = engine._get_indexed_profile("people/stephen-golub")
-        assert stephen is not None
+        # Andre (people/andre) has no relationship to projects/webservices initially
+        # Let's save Andre with a relationship pointing to projects/webservices
+        andre = engine._get_indexed_profile("people/andre")
+        assert andre is not None
+        assert len(andre.relationships) == 0
 
-        # Add projects relationship pointing to projects/firewall
-        stephen.relationships.append(
-            Relationship(name="projects", target="projects/firewall")
+        # Add projects relationship pointing to projects/webservices
+        andre.relationships.append(
+            Relationship(name="projects", target="projects/webservices")
         )
 
-        resp = engine.write_profile(stephen)
+        resp = engine.write_profile(andre)
         assert resp.ok is True
 
-        # Reload target and verify that projects/firewall got the inverse 'people' relationship back to Stephen
-        firewall = engine._get_indexed_profile("projects/firewall")
-        assert firewall is not None
+        # Reload target and verify that projects/webservices got the inverse
+        # 'people' relationship back to Andre
+        webservices = engine._get_indexed_profile("projects/webservices")
+        assert webservices is not None
         has_inverse = any(
-            r.name == "people" and r.target == "people/stephen-golub"
-            for r in firewall.relationships
+            r.name == "people" and r.target == "people/andre"
+            for r in webservices.relationships
         )
         assert has_inverse is True
 
