@@ -28,6 +28,10 @@ uv sync
 uv run kb
 ```
 
+`kb` with no arguments launches the interactive TUI dashboard. It's also a
+growing CLI — e.g. `uv run kb people list` and `uv run kb people show <name>`
+print vault data as JSON. Run `uv run kb --help` for the full command list.
+
 Requires Python 3.12+.
 
 ## Development
