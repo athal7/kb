@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from kb.contract.envelope import ContractResponse, ContractWarning, ErrorResponse, SuccessResponse
 from kb.contract.errors import ContractError
+from kb.contract.query import QueryFilter, QueryHit, QueryRequest, QueryResult
 from kb.contract.schema import contract_schema
 from kb.contract.schema_pack import (
     Document,
@@ -18,7 +19,7 @@ from kb.contract.schema_pack import (
     ResolutionMapEntry,
     Section,
 )
-from kb.contract.translate import person_to_profile, project_to_profile
+from kb.contract.translate import person_to_profile, project_to_profile, product_to_profile
 from kb.contract.version import CONTRACT_VERSION
 
 __all__ = [
@@ -30,6 +31,10 @@ __all__ = [
     "ErrorResponse",
     "LedgerEntry",
     "Profile",
+    "QueryFilter",
+    "QueryHit",
+    "QueryRequest",
+    "QueryResult",
     "Relationship",
     "ResolutionMapEntry",
     "Section",
@@ -37,4 +42,5 @@ __all__ = [
     "contract_schema",
     "person_to_profile",
     "project_to_profile",
+    "product_to_profile",
 ]

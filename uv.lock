@@ -319,14 +319,14 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "pydantic", specifier = ">=2.12" },
-    { name = "pyobjc-framework-eventkit", marker = "sys_platform == 'darwin'", specifier = ">=10.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "textual", specifier = ">=0.80" },
+    { name = "pyobjc-framework-eventkit", marker = "sys_platform == 'darwin'", specifier = ">=12.2.1" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "textual", specifier = ">=8.2.8" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
     { name = "ruff", specifier = ">=0.4" },
     { name = "textual-dev", specifier = ">=1.5" },
