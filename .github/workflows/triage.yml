@@ -19,11 +19,6 @@ permissions:
   pull-requests: write
 
 jobs:
-  label:
-    if: github.event_name == 'issues' || github.event_name == 'pull_request_target'
-    uses: athal7/gh-triage-workflows/.github/workflows/label.yml@main
-    secrets: inherit
-
   stale:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     uses: athal7/gh-triage-workflows/.github/workflows/stale.yml@main
