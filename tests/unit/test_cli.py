@@ -101,3 +101,122 @@ class DescribePeopleShow:
 
         assert result.exit_code != 0
         assert "not found" in (result.output + str(result.exception))
+
+
+class DescribeJournalAppend:
+    def it_creates_new_journal_with_h1_and_content(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        result = CliRunner().invoke(cli, [
+            "journal", "append",
+            "--date", "2026-07-15",
+            "--content", "Some test content"
+        ])
+
+        assert result.exit_code == 0
+        res_data = json.loads(result.output)
+        assert res_data["ok"] is True
+        assert res_data["data"]["date"] == "2026-07-15"
+
+        created_file = tmp_path / "journal" / "2026-07-15.md"
+        assert created_file.is_file()
+        content = created_file.read_text(encoding="utf-8")
+        assert content == "# 2026-07-15\n\nSome test content\n"
+
+    def it_creates_new_journal_under_specific_section(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        result = CliRunner().invoke(cli, [
+            "journal", "append",
+            "--date", "2026-07-15",
+            "--section", "Git Activity",
+            "--content", "- commit 1"
+        ])
+
+        assert result.exit_code == 0
+        created_file = tmp_path / "journal" / "2026-07-15.md"
+        content = created_file.read_text(encoding="utf-8")
+        assert content == "# 2026-07-15\n\n## Git Activity\n- commit 1\n"
+
+    def it_appends_to_existing_section(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        journal_file = tmp_path / "journal" / "2026-07-15.md"
+        journal_file.write_text("# 2026-07-15\n\n## Git Activity\n- commit 1\n", encoding="utf-8")
+
+        result = CliRunner().invoke(cli, [
+            "journal", "append",
+            "--date", "2026-07-15",
+            "--section", "Git Activity",
+            "--content", "- commit 2"
+        ])
+
+        assert result.exit_code == 0
+        content = journal_file.read_text(encoding="utf-8")
+        assert content == "# 2026-07-15\n\n## Git Activity\n- commit 1\n\n- commit 2\n"
+
+    def it_creates_section_in_existing_journal_if_missing(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        journal_file = tmp_path / "journal" / "2026-07-15.md"
+        journal_file.write_text(
+            "# 2026-07-15\n\n## Slack Context\n- discussion\n",
+            encoding="utf-8"
+        )
+
+        result = CliRunner().invoke(cli, [
+            "journal", "append",
+            "--date", "2026-07-15",
+            "--section", "Git Activity",
+            "--content", "- commit 1"
+        ])
+
+        assert result.exit_code == 0
+        content = journal_file.read_text(encoding="utf-8")
+        expected_content = (
+            "# 2026-07-15\n\n"
+            "## Slack Context\n- discussion\n\n"
+            "## Git Activity\n- commit 1\n"
+        )
+        assert content == expected_content
+
+    def it_supports_reading_content_from_stdin(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        result = CliRunner().invoke(
+            cli,
+            ["journal", "append", "--date", "2026-07-15", "--section", "Git Activity"],
+            input="- stdin commit\n"
+        )
+
+        assert result.exit_code == 0
+        created_file = tmp_path / "journal" / "2026-07-15.md"
+        content = created_file.read_text(encoding="utf-8")
+        assert content == "# 2026-07-15\n\n## Git Activity\n- stdin commit\n"
+
+    def it_fails_with_validation_on_invalid_date(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        result = CliRunner().invoke(cli, [
+            "journal", "append",
+            "--date", "invalid-date",
+            "--content", "stuff"
+        ])
+
+        assert result.exit_code != 0
+        # Error is printed to stderr
+        err_data = json.loads(result.stderr)
+        assert err_data["ok"] is False
+        assert err_data["error"]["code"] == "validation.invalid_date"

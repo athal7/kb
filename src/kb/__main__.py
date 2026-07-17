@@ -147,6 +147,148 @@ def people_show(ctx: click.Context, name: str) -> None:
     click.echo(json.dumps(_person_to_dict(person), indent=2))
 
 
+@cli.group()
+def journal() -> None:
+    """Manage journal entries in the vault."""
+
+
+@journal.command("append")
+@click.option(
+    "--date",
+    "date_str",
+    help="The date of the journal entry (YYYY-MM-DD). Defaults to today."
+)
+@click.option("--section", help="The section heading to append to (e.g., 'Git Activity').")
+@click.option("--content", help="The content to append. Reads from stdin if not provided or '-'.")
+@click.pass_context
+def journal_append(
+    ctx: click.Context,
+    date_str: str | None,
+    section: str | None,
+    content: str | None
+) -> None:
+    """Append content to a daily journal entry, optionally under a specific section."""
+    import re
+    from datetime import date as datetime_date
+
+    from kb.contract import CONTRACT_VERSION
+
+    if date_str is None:
+        date_str = datetime_date.today().strftime("%Y-%m-%d")
+    else:
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_str):
+            err_resp = {
+                "contract_version": CONTRACT_VERSION,
+                "ok": False,
+                "error": {
+                    "code": "validation.invalid_date",
+                    "message": f"Invalid date format: {date_str}. Must be YYYY-MM-DD.",
+                    "path": "/date",
+                    "retryable": False
+                },
+                "warnings": []
+            }
+            click.echo(json.dumps(err_resp, indent=2), err=True)
+            ctx.exit(1)
+
+    if content is None or content == "-":
+        import sys
+        content = sys.stdin.read()
+
+    kb_root = resolve_kb_root(None, validate=True)
+    journal_dir = kb_root / "journal"
+    journal_dir.mkdir(parents=True, exist_ok=True)
+    journal_file = journal_dir / f"{date_str}.md"
+
+    # Read existing content or start fresh
+    if journal_file.is_file():
+        file_text = journal_file.read_text(encoding="utf-8")
+    else:
+        file_text = f"# {date_str}\n"
+
+    from kb.core.markdown import Section, split_sections
+
+    sections = split_sections(file_text)
+
+    # Ensure we have the initial H1 section if it's a new file or doesn't have it
+    has_h1 = any(s.level == 1 for s in sections)
+    if not has_h1:
+        sections.insert(0, Section(heading=date_str, level=1, lines=[]))
+
+    content_lines = [line for line in content.split("\n")]
+    if content_lines and content_lines[-1] == "":
+        content_lines.pop()
+
+    if section:
+        target_section = None
+        for s in sections:
+            if s.level == 2 and s.heading and s.heading.strip().lower() == section.strip().lower():
+                target_section = s
+                break
+
+        if target_section is not None:
+            new_lines = list(target_section.lines)
+            if new_lines and new_lines[-1] != "":
+                new_lines.append("")
+            new_lines.extend(content_lines)
+            idx = sections.index(target_section)
+            sections[idx] = Section(
+                heading=target_section.heading,
+                level=target_section.level,
+                lines=new_lines
+            )
+        else:
+            sections.append(Section(heading=section, level=2, lines=content_lines))
+    else:
+        if sections:
+            last_section = sections[-1]
+            new_lines = list(last_section.lines)
+            if new_lines:
+                if new_lines[-1] != "":
+                    new_lines.append("")
+            else:
+                if last_section.level == 1:
+                    new_lines.append("")
+            new_lines.extend(content_lines)
+            sections[-1] = Section(
+                heading=last_section.heading,
+                level=last_section.level,
+                lines=new_lines
+            )
+        else:
+            sections.append(Section(heading=None, level=0, lines=content_lines))
+
+    # Serialize sections back to markdown
+    parts = []
+    for s in sections:
+        part = []
+        if s.heading is not None:
+            part.append(f"{'#' * s.level} {s.heading}")
+        part.extend(s.lines)
+        parts.append("\n".join(part))
+
+    new_text = "\n\n".join(parts)
+    if not new_text.endswith("\n"):
+        new_text += "\n"
+
+    # Write back to disk
+    journal_file.write_text(new_text, encoding="utf-8")
+
+    # Success Response Envelope
+    success_resp = {
+        "contract_version": CONTRACT_VERSION,
+        "ok": True,
+        "data": {
+            "file": f"journal/{date_str}.md",
+            "date": date_str,
+            "section": section,
+            "bytes_written": len(new_text)
+        },
+        "warnings": []
+    }
+    click.echo(json.dumps(success_resp, indent=2))
+
+
 def main() -> None:
     cli()
 
