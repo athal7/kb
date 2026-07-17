@@ -100,7 +100,8 @@ class DescribeCollectorMain:
         assert "--- DRY RUN ---" in captured.out
         assert "Date: 2026-07-15" in captured.out
         assert "Section: Git Activity" in captured.out
-        assert "- **app**: 1 commit, 1 file changed (+5/-0 lines)" in captured.out
+        repo_name = Path(".").resolve().name
+        assert f"- **{repo_name}**: 1 commit, 1 file changed (+5/-0 lines)" in captured.out
 
     @patch("sys.exit")
     @patch("subprocess.run")
