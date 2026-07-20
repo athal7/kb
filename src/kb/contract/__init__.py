@@ -16,6 +16,7 @@ from kb.contract.collector import (
 )
 from kb.contract.envelope import ContractResponse, ContractWarning, ErrorResponse, SuccessResponse
 from kb.contract.errors import ContractError
+from kb.contract.query import QueryFilter, QueryHit, QueryRequest, QueryResult
 from kb.contract.schema import contract_schema
 from kb.contract.schema_pack import (
     Document,
@@ -36,6 +37,7 @@ from kb.contract.translate import (
     person_mention_from_core,
     person_mention_to_core,
     person_to_profile,
+    product_to_profile,
     project_to_profile,
 )
 from kb.contract.version import CONTRACT_VERSION
@@ -54,6 +56,10 @@ __all__ = [
     "MeetingNote",
     "PersonMention",
     "Profile",
+    "QueryFilter",
+    "QueryHit",
+    "QueryRequest",
+    "QueryResult",
     "Relationship",
     "ResolutionMapEntry",
     "Section",
@@ -69,5 +75,6 @@ __all__ = [
     "person_mention_from_core",
     "person_mention_to_core",
     "person_to_profile",
+    "product_to_profile",
     "project_to_profile",
 ]

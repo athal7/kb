@@ -101,3 +101,50 @@ class DescribePeopleShow:
 
         assert result.exit_code != 0
         assert "not found" in (result.output + str(result.exception))
+
+
+class DescribeCliQueryAndContract:
+    def it_runs_query_and_returns_envelope_json(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["query", "-t", "gRPC"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["contract_version"]
+        assert len(data["data"]["hits"]) > 0
+
+    def it_supports_limit_option(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["query", "-l", "1"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert len(data["data"]["hits"]) == 1
+
+    def it_prints_contract_version(self):
+        result = CliRunner().invoke(cli, ["contract", "version"])
+
+        assert result.exit_code == 0
+        assert "0.1.0" in result.output
+
+    def it_prints_contract_schema(self):
+        result = CliRunner().invoke(cli, ["contract", "schema"])
+
+        assert result.exit_code == 0
+        schema = json.loads(result.output)
+        assert "ContractResponse" in schema
+        assert "Profile" in schema
+
+    def it_rejects_empty_json_string(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["query", "--json", ""])
+
+        assert result.exit_code != 0
+        data = json.loads(result.output)
+        assert data["ok"] is False
+        assert "Invalid QueryRequest JSON" in data["error"]["message"]

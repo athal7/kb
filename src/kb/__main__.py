@@ -18,6 +18,7 @@ a config edit takes effect on the next launch, not the next refresh keypress.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import click
@@ -145,6 +146,116 @@ def people_show(ctx: click.Context, name: str) -> None:
         click.echo(json.dumps({"error": "not found", "name": name}), err=True)
         ctx.exit(1)
     click.echo(json.dumps(_person_to_dict(person), indent=2))
+
+
+@cli.command("query")
+@click.option("-t", "--text", help="Substring/full-text search text")
+@click.option("-f", "--filter", "filters", multiple=True, help="Field filters, e.g. status=active")
+@click.option(
+    "-c",
+    "--collection",
+    "collections",
+    multiple=True,
+    help="Collection scope, e.g. people",
+)
+@click.option("-r", "--related-to", help="Filter by relationship target ref")
+@click.option("--relationship", help="Filter by relationship name")
+@click.option("-l", "--limit", type=int, help="Limit number of results")
+@click.option("--json", "json_str", help="QueryRequest as raw JSON string")
+@click.pass_context
+def query_cmd(
+    ctx: click.Context,
+    text: str | None,
+    filters: list[str],
+    collections: list[str],
+    related_to: str | None,
+    relationship: str | None,
+    limit: int | None,
+    json_str: str | None,
+) -> None:
+    """Query and search the KB vault."""
+    from kb.contract.query import QueryFilter, QueryRequest
+    from kb.core.engine import Engine
+
+    try:
+        kb_root = resolve_kb_root(None, validate=True)
+        engine = Engine(kb_root)
+    except Exception as e:
+        from kb.contract.envelope import ErrorResponse
+        from kb.contract.errors import ContractError
+        err = ErrorResponse(
+            error=ContractError.io(
+                path="",
+                message=f"Failed to load KB: {e}"
+            )
+        )
+        click.echo(err.model_dump_json(indent=2 if sys.stdout.isatty() else None))
+        ctx.exit(1)
+
+    if json_str is not None:
+        try:
+            req = QueryRequest.model_validate_json(json_str)
+        except Exception as e:
+            from kb.contract.envelope import ErrorResponse
+            from kb.contract.errors import ContractError
+            err = ErrorResponse(
+                error=ContractError.validation(
+                    path="/",
+                    message=f"Invalid QueryRequest JSON: {e}",
+                    code="validation.invariant"
+                )
+            )
+            click.echo(err.model_dump_json(indent=2 if sys.stdout.isatty() else None))
+            ctx.exit(1)
+    else:
+        parsed_filters = []
+        for flt in filters:
+            op = "="
+            field = flt
+            val = ""
+            for possible_op in [">=", "<=", "!=", "=", ">", "<", "contains"]:
+                if possible_op in flt:
+                    parts = flt.split(possible_op, 1)
+                    field = parts[0].strip()
+                    op = possible_op
+                    val = parts[1].strip()
+                    break
+            parsed_filters.append(QueryFilter(field=field, op=op, value=val))
+
+        req = QueryRequest(
+            text=text,
+            filters=parsed_filters,
+            collections=list(collections),
+            related_to=related_to,
+            relationship=relationship,
+            limit=limit,
+        )
+
+    response = engine.query(req)
+
+    indent = 2 if sys.stdout.isatty() else None
+    click.echo(response.model_dump_json(indent=indent))
+    if not response.ok:
+        ctx.exit(1)
+
+
+@cli.group()
+def contract() -> None:
+    """Introspect the KB Contract."""
+
+
+@contract.command("version")
+def contract_version() -> None:
+    """Print the contract version."""
+    from kb.contract.version import CONTRACT_VERSION
+    click.echo(CONTRACT_VERSION)
+
+
+@contract.command("schema")
+def contract_schema_cmd() -> None:
+    """Print the contract's JSON Schema."""
+    from kb.contract.schema import contract_schema
+    click.echo(json.dumps(contract_schema(), indent=2))
 
 
 def main() -> None:

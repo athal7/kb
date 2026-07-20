@@ -51,6 +51,7 @@ from kb.core.models import (
 )
 from kb.core.models import (
     EntityKind,
+    Product,
     Project,
     Resolution,
     ResolutionStatus,
@@ -146,6 +147,21 @@ def project_to_profile(project: Project, resolver: WikilinkResolver) -> Profile:
         },
         sections=[_translate_section(s) for s in project.sections],
         relationships=relationships,
+    )
+
+
+def product_to_profile(product: Product, resolver: WikilinkResolver) -> Profile:
+    return Profile(
+        ref=f"products/{_slug(product.file)}",
+        kind="product",
+        fields={
+            "status": product.status,
+            "repos": product.repos,
+            "linear": product.linear_label,
+            "aliases": product.aliases,
+        },
+        sections=[_translate_section(s) for s in product.sections],
+        relationships=[],
     )
 
 
