@@ -481,6 +481,7 @@ class Engine:
         lock_fd = None
         for _ in range(50):  # retry up to 5 seconds
             reclaim_stale_lock()
+            fd = None
             try:
                 fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                 lock_fd = os.fdopen(fd, "w")
@@ -490,6 +491,34 @@ class Engine:
                 break
             except FileExistsError:
                 time.sleep(0.1)
+            except OSError as lock_err:
+                # Something other than expected lock contention (e.g. a
+                # PermissionError from os.open, or a failure in fdopen/write/
+                # flush on an fd that os.open already created). Don't retry —
+                # clean up whatever this attempt created and fail immediately
+                # instead of leaking the fd or leaving a lock file behind that
+                # would block other writers until the staleness window passes.
+                if lock_fd is not None:
+                    try:
+                        lock_fd.close()
+                    except Exception:
+                        pass
+                elif fd is not None:
+                    try:
+                        os.close(fd)
+                    except Exception:
+                        pass
+                if fd is not None:
+                    try:
+                        lock_path.unlink()
+                    except Exception:
+                        pass
+                return ErrorResponse(
+                    error=ContractError.io(
+                        path="",
+                        message=f"Could not acquire write lock: {lock_err}"
+                    )
+                )
 
         if not acquired:
             return ErrorResponse(
@@ -736,6 +765,19 @@ class Engine:
                         break
             canonical_target = title or slug
 
+            # Derive the profile's previous canonical target (pre-write state) the
+            # same way, so a rename doesn't leave stale entries pointing at a title
+            # that no longer exists anywhere.
+            previous_canonical_target = None
+            if old_profile:
+                old_title = old_profile.fields.get("name") or ""
+                if not old_title:
+                    for sec in old_profile.sections:
+                        if sec.heading:
+                            old_title = sec.heading
+                            break
+                previous_canonical_target = old_title or slug
+
             # New aliases list
             new_aliases = profile.fields.get("aliases", [])
             # Convert to list of strings
@@ -748,7 +790,7 @@ class Engine:
             # 1. Remove keys mapping to this canonical_target if they are no longer in new_aliases
             keys_to_remove = []
             for k, v in map_data.items():
-                if v == canonical_target or v == slug:
+                if v == canonical_target or v == slug or v == previous_canonical_target:
                     if k not in new_aliases:
                         keys_to_remove.append(k)
             for k in keys_to_remove:

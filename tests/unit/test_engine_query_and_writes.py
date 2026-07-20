@@ -7,6 +7,7 @@ alias sync), and query capabilities using the anonymized fixtures.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -141,6 +142,34 @@ class DescribeEngineWrites:
         # Verify that file was NOT created on disk
         assert not (temp_vault / "people" / "bad-test.md").is_file()
 
+    def it_returns_io_error_when_lock_acquisition_fails_with_non_contention_oserror(
+        self, temp_vault, monkeypatch
+    ):
+        engine = Engine(temp_vault)
+
+        profile = Profile(
+            ref="people/lock-error-test",
+            kind="person",
+            fields={"email": "lock-error@example.com"},
+            sections=[Section(heading="Lock Error Test", body="- something")],
+        )
+
+        def raise_permission_error(*args, **kwargs):
+            raise PermissionError("simulated permission failure")
+
+        # os.open (which creates the lock file via O_CREAT|O_EXCL) succeeds, but
+        # the subsequent os.fdopen fails with something other than
+        # FileExistsError. That must not retry or propagate — it should be
+        # reported as a structured io error, and the lock file it created must
+        # not be left behind.
+        monkeypatch.setattr(os, "fdopen", raise_permission_error)
+
+        resp = engine.write_profile(profile)
+
+        assert resp.ok is False
+        assert resp.error.code.startswith("io.")
+        assert not (temp_vault / ".kb.lock").is_file()
+
     def it_syncs_bidirectional_relationships_upon_write(self, temp_vault):
         engine = Engine(temp_vault)
 
@@ -185,6 +214,37 @@ class DescribeEngineWrites:
         assert names_json["ksilv"] == "Kate Silverstein"
         # Old aliases not in the list should be cleaned up
         assert "kate" not in names_json
+
+    def it_removes_stale_alias_map_entries_after_profile_rename(self, temp_vault):
+        engine = Engine(temp_vault)
+
+        # Title matches the slug-derived heading so it round-trips through
+        # serialization as the H1 (see `_serialize_profile_to_markdown`).
+        original = Profile(
+            ref="people/rename-test",
+            kind="person",
+            fields={"email": "rename@example.com", "aliases": ["OldAlias"]},
+            sections=[Section(heading="Rename Test", body="- something")],
+        )
+        resp = engine.write_profile(original)
+        assert resp.ok is True
+
+        names_json = json.loads((temp_vault / "names.json").read_text(encoding="utf-8"))
+        assert names_json["OldAlias"] == "Rename Test"
+
+        # Rename: change the title and swap the alias.
+        renamed = engine._get_indexed_profile("people/rename-test")
+        assert renamed is not None
+        renamed.sections[0].heading = "New Name"
+        renamed.fields["aliases"] = ["NewAlias"]
+
+        resp2 = engine.write_profile(renamed)
+        assert resp2.ok is True
+
+        names_json_after = json.loads((temp_vault / "names.json").read_text(encoding="utf-8"))
+        assert "OldAlias" not in names_json_after
+        assert all(v != "Rename Test" for v in names_json_after.values())
+        assert names_json_after["NewAlias"] == "New Name"
 
     def it_generates_slug_if_not_specified(self, temp_vault):
         engine = Engine(temp_vault)
