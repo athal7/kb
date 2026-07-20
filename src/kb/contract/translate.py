@@ -323,6 +323,11 @@ def meeting_note_from_core(core: CoreJournalEntry) -> CollectorMeetingNote:
     `CoreJournalEntry` has no title field, so the title is approximated from the file's
     stem the same way `decision_from_core` does — the best available signal, not a
     guarantee of round-trip fidelity (see `_meeting_note_lossy_fields`).
+
+    `CoreJournalEntry.date` is a required non-optional str, so `meeting_note_to_core`
+    maps a missing date to `""` on the way in (`note.date or ""`). Mapping `core.date`
+    back unchanged would turn that `""` into a MeetingNote date of `""` rather than the
+    `None` it started as, so an empty core date is mapped back to `None` here.
     """
     sections = []
     body_parts = []
@@ -334,7 +339,7 @@ def meeting_note_from_core(core: CoreJournalEntry) -> CollectorMeetingNote:
     wikilinks = [link.raw_text for link in core.wikilinks]
     return CollectorMeetingNote(
         title=PurePosixPath(core.file).stem if core.file else "",
-        date=core.date,
+        date=core.date or None,
         body="\n\n".join(body_parts),
         sections=sections,
         wikilinks=wikilinks,
@@ -354,10 +359,17 @@ def _slug_from_name(name: str) -> str:
 
 
 def person_mention_to_core(mention: CollectorPersonMention, file_path: str = "") -> CorePerson:
-    """Convert a collector PersonMention to a core Person."""
+    """Convert a collector PersonMention to a core Person.
+
+    `name` is stored in frontmatter (not just used to derive `file_path`) because an
+    explicit `file_path` need not be a slug of `name` (e.g. a vault file predates a
+    person's display-name change) — recovering `name` from the file stem alone would
+    silently mangle it on the way back.
+    """
     file_path = file_path or f"people/{_slug_from_name(mention.name)}.md"
 
     frontmatter = {
+        "name": mention.name,
         "email": mention.email,
         "team": mention.team,
         "title": mention.title,
@@ -387,11 +399,20 @@ def person_mention_to_core(mention: CollectorPersonMention, file_path: str = "")
 
 
 def person_mention_from_core(core: CorePerson) -> CollectorPersonMention:
-    """Convert a core Person to a collector PersonMention."""
+    """Convert a core Person to a collector PersonMention.
+
+    Prefers the `name` stored in frontmatter by `person_mention_to_core` over deriving
+    it from the file stem, since an explicit `file_path` need not be a slug of `name`.
+    Falls back to the file-stem derivation for a `CorePerson` that predates this
+    contract layer and so has no `name` in frontmatter.
+    """
     context_sec = core.section("Context")
     context = context_sec.body if context_sec else None
+    name = core.frontmatter.get("name") or (
+        PurePosixPath(core.file).stem if core.file else ""
+    )
     return CollectorPersonMention(
-        name=PurePosixPath(core.file).stem if core.file else "",
+        name=name,
         email=core.email,
         slack_id=core.slack_id,
         team=core.team,

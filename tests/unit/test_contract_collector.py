@@ -271,6 +271,17 @@ class DescribeCollectorTranslation:
         assert back.sections[0].body == "Schema."
         assert back.wikilinks == ["SQLite"]
 
+    def it_preserves_none_date_in_meeting_note_round_trip(self):
+        # `CoreJournalEntry.date` is a required non-optional str, so
+        # meeting_note_to_core maps a missing date to "" on the way in. The
+        # round trip back should recover None, not "".
+        note = MeetingNote(title="Design Sync", date=None, body="Review SQLite.")
+        core = meeting_note_to_core(note, "journal/2026-07-16.md")
+
+        back = meeting_note_from_core(core)
+
+        assert back.date is None
+
     def it_translates_person_mention_bidirectionally(self):
         # Collector to Core
         mention = PersonMention(
@@ -293,6 +304,7 @@ class DescribeCollectorTranslation:
         assert core.title == "Director"
         assert core.aliases == ["Kate"]
         assert core.frontmatter == {
+            "name": "ksilverstein",
             "email": "k@example.com",
             "slack_id": "U123",
             "team": "Engineering",
@@ -315,6 +327,17 @@ class DescribeCollectorTranslation:
         assert back.aliases == ["Kate"]
         assert back.context == "Active member."
         assert back.source == "Slack"
+
+    def it_preserves_person_mention_name_when_file_path_diverges_from_slug(self):
+        # An explicit file_path need not be a slug of name (e.g. a vault file
+        # named before a person's display name changed). Recovering name from
+        # the file stem in that case would silently mangle it.
+        mention = PersonMention(name="Kate Silverstein", email="k@example.com")
+        core = person_mention_to_core(mention, "people/ksilverstein.md")
+
+        back = person_mention_from_core(core)
+
+        assert back.name == "Kate Silverstein"
 
     def it_derives_a_file_path_from_the_name_when_none_is_given(self):
         # No explicit file_path (the default ""), so the previous behavior left
