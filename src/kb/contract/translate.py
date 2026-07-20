@@ -24,14 +24,23 @@ an expected, non-error vault state per `core/models.py`'s `ResolutionStatus`).
 
 from __future__ import annotations
 
+import re
 from pathlib import PurePosixPath
 from typing import Protocol
 
 from kb.contract.collector import (
     ActionItem as CollectorActionItem,
+)
+from kb.contract.collector import (
     Decision as CollectorDecision,
+)
+from kb.contract.collector import (
     JournalEntry as CollectorJournalEntry,
+)
+from kb.contract.collector import (
     MeetingNote as CollectorMeetingNote,
+)
+from kb.contract.collector import (
     PersonMention as CollectorPersonMention,
 )
 from kb.contract.schema_pack import Profile, Relationship, Section
@@ -39,14 +48,21 @@ from kb.core.actionitems import ActionItem as CoreActionItem
 from kb.core.markdown import Section as CoreSection
 from kb.core.models import (
     Decision as CoreDecision,
+)
+from kb.core.models import (
     EntityKind,
-    JournalEntry as CoreJournalEntry,
-    Person,
-    Person as CorePerson,
     Project,
     Resolution,
     ResolutionStatus,
     Wikilink,
+)
+from kb.core.models import (
+    JournalEntry as CoreJournalEntry,
+)
+from kb.core.models import (
+    Person as CorePerson,
+)
+from kb.core.models import (
     Wikilink as CoreWikilink,
 )
 
@@ -87,7 +103,7 @@ def _slug(file: str) -> str:
     return PurePosixPath(file).stem
 
 
-def person_to_profile(person: Person, resolver: WikilinkResolver) -> Profile:
+def person_to_profile(person: CorePerson, resolver: WikilinkResolver) -> Profile:
     relationships = [
         _relationship("projects", link, EntityKind.PROJECT, resolver)
         for link in person.project_links
@@ -158,6 +174,27 @@ def action_item_to_core(item: CollectorActionItem) -> CoreActionItem:
     )
 
 
+def _decision_lossy_fields(decision: CollectorDecision, file_path: str) -> list[str]:
+    """Which `Decision` fields `CoreDecision` has nowhere to put.
+
+    `CoreDecision` carries no title/date/status/deciders fields, so those are only
+    recoverable (approximately, for title) from the file path's stem. Title is flagged
+    as lossy only when that recovery would actually produce something different from
+    what was given — a title that already matches the filename isn't losing anything.
+    """
+    derived_title = PurePosixPath(file_path).stem if file_path else ""
+    fields = []
+    if decision.title != derived_title:
+        fields.append("title")
+    if decision.date is not None:
+        fields.append("date")
+    if decision.status is not None:
+        fields.append("status")
+    if decision.deciders:
+        fields.append("deciders")
+    return fields
+
+
 def decision_to_core(decision: CollectorDecision, file_path: str = "") -> CoreDecision:
     """Convert a collector Decision to a core Decision."""
     core_sections = []
@@ -165,10 +202,19 @@ def decision_to_core(decision: CollectorDecision, file_path: str = "") -> CoreDe
         core_sections.append(CoreSection(heading=None, level=0, lines=decision.body.split("\n")))
     for sec in decision.sections:
         core_sections.append(section_to_core(sec))
+
+    lossy_fields = _decision_lossy_fields(decision, file_path)
+    warnings = []
+    if lossy_fields:
+        warnings.append(
+            "collector Decision fields not preserved in core model: " + ", ".join(lossy_fields)
+        )
+
     return CoreDecision(
         file=file_path,
         is_readonly=False,
         sections=core_sections,
+        warnings=warnings,
     )
 
 
@@ -226,6 +272,21 @@ def journal_entry_from_core(core: CoreJournalEntry) -> CollectorJournalEntry:
     )
 
 
+def _meeting_note_lossy_fields(note: CollectorMeetingNote) -> list[str]:
+    """Which `MeetingNote` fields `CoreJournalEntry` has nowhere to put.
+
+    Unlike a Decision's title, a meeting note's title has no filename-derived fallback
+    to compare against (journal file names are dated, not titled), so any non-empty
+    title or participant list is unconditionally lossy here.
+    """
+    fields = []
+    if note.title:
+        fields.append("title")
+    if note.participants:
+        fields.append("participants")
+    return fields
+
+
 def meeting_note_to_core(note: CollectorMeetingNote, file_path: str = "") -> CoreJournalEntry:
     """Convert a collector MeetingNote to a core JournalEntry."""
     core_sections = []
@@ -238,22 +299,71 @@ def meeting_note_to_core(note: CollectorMeetingNote, file_path: str = "") -> Cor
         CoreWikilink(raw_text=link, source_file=file_path, source_line=-1)
         for link in note.wikilinks
     ]
+
+    lossy_fields = _meeting_note_lossy_fields(note)
+    warnings = []
+    if lossy_fields:
+        warnings.append(
+            "collector MeetingNote fields not preserved in core model: "
+            + ", ".join(lossy_fields)
+        )
+
     return CoreJournalEntry(
         file=file_path,
         date=note.date or "",
         sections=core_sections,
         wikilinks=wikilinks,
+        warnings=warnings,
     )
+
+
+def meeting_note_from_core(core: CoreJournalEntry) -> CollectorMeetingNote:
+    """Convert a core JournalEntry to a collector MeetingNote.
+
+    `CoreJournalEntry` has no title field, so the title is approximated from the file's
+    stem the same way `decision_from_core` does — the best available signal, not a
+    guarantee of round-trip fidelity (see `_meeting_note_lossy_fields`).
+    """
+    sections = []
+    body_parts = []
+    for sec in core.sections:
+        if sec.heading is None:
+            body_parts.append(sec.body)
+        else:
+            sections.append(_translate_section(sec))
+    wikilinks = [link.raw_text for link in core.wikilinks]
+    return CollectorMeetingNote(
+        title=PurePosixPath(core.file).stem if core.file else "",
+        date=core.date,
+        body="\n\n".join(body_parts),
+        sections=sections,
+        wikilinks=wikilinks,
+    )
+
+
+_SLUG_RUN = re.compile(r"[^a-z0-9]+")
+
+
+def _slug_from_name(name: str) -> str:
+    """Best-effort filename slug for a name with no vault file yet, e.g.
+    `"Kate Silverstein"` -> `"kate-silverstein"`. Mirrors this vault's kebab-case
+    person-file convention (see `tests/fixtures/vault/people/`), not a guarantee of
+    matching whatever file a real vault write would use.
+    """
+    return _SLUG_RUN.sub("-", name.strip().lower()).strip("-") or "unknown"
 
 
 def person_mention_to_core(mention: CollectorPersonMention, file_path: str = "") -> CorePerson:
     """Convert a collector PersonMention to a core Person."""
+    file_path = file_path or f"people/{_slug_from_name(mention.name)}.md"
+
     frontmatter = {
         "email": mention.email,
         "team": mention.team,
         "title": mention.title,
         "slack_id": mention.slack_id,
         "aliases": mention.aliases,
+        "source": mention.source,
     }
     frontmatter = {k: v for k, v in frontmatter.items() if v is not None}
 
@@ -288,4 +398,5 @@ def person_mention_from_core(core: CorePerson) -> CollectorPersonMention:
         title=core.title,
         aliases=core.aliases,
         context=context,
+        source=core.frontmatter.get("source"),
     )
