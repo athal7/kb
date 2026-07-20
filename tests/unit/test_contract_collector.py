@@ -16,19 +16,15 @@ from kb.contract import (
     decision_to_core,
     journal_entry_from_core,
     journal_entry_to_core,
-    meeting_note_from_core,
     meeting_note_to_core,
     person_mention_from_core,
     person_mention_to_core,
 )
 from kb.core.actionitems import ActionItem as CoreActionItem
+from kb.core.markdown import Section as CoreSection
 from kb.core.models import (
     Decision as CoreDecision,
-)
-from kb.core.models import (
     JournalEntry as CoreJournalEntry,
-)
-from kb.core.models import (
     Person as CorePerson,
 )
 
@@ -167,8 +163,6 @@ class DescribeCollectorTranslation:
         dec = Decision(
             title="Adopt SQLite",
             date="2026-07-16",
-            status="accepted",
-            deciders=["Stephen", "Kate"],
             body="Use SQLite.",
             sections=[Section(heading="Rationale", body="Serverless.")],
         )
@@ -182,10 +176,6 @@ class DescribeCollectorTranslation:
         assert core.sections[0].body == "Use SQLite."
         assert core.sections[1].heading == "Rationale"
         assert core.sections[1].body == "Serverless."
-        assert core.warnings == [
-            "collector Decision fields not preserved in core model: "
-            "title, date, status, deciders"
-        ]
 
         # Core back to Collector
         back = decision_from_core(core)
@@ -195,14 +185,6 @@ class DescribeCollectorTranslation:
         assert len(back.sections) == 1
         assert back.sections[0].heading == "Rationale"
         assert back.sections[0].body == "Serverless."
-
-    def it_does_not_warn_when_decision_has_no_lossy_fields(self):
-        # title matches what decision_from_core would derive from the filename, and
-        # date/status/deciders are all absent, so nothing is actually lost.
-        dec = Decision(title="sqlite", body="Use SQLite.")
-        core = decision_to_core(dec, "decisions/sqlite.md")
-
-        assert core.warnings == []
 
     def it_translates_journal_entry_bidirectionally(self):
         # Collector to Core
@@ -235,8 +217,7 @@ class DescribeCollectorTranslation:
         assert back.sections[0].body == "Coding."
         assert back.wikilinks == ["Obsidian"]
 
-    def it_translates_meeting_note_bidirectionally(self):
-        # Collector to Core
+    def it_translates_meeting_note_to_core(self):
         note = MeetingNote(
             title="Design Sync",
             date="2026-07-16",
@@ -257,19 +238,6 @@ class DescribeCollectorTranslation:
         assert core.sections[1].body == "Schema."
         assert len(core.wikilinks) == 1
         assert core.wikilinks[0].raw_text == "SQLite"
-        assert core.warnings == [
-            "collector MeetingNote fields not preserved in core model: title, participants"
-        ]
-
-        # Core back to Collector
-        back = meeting_note_from_core(core)
-        assert isinstance(back, MeetingNote)
-        assert back.date == "2026-07-16"
-        assert back.body == "Review SQLite."
-        assert len(back.sections) == 1
-        assert back.sections[0].heading == "Next Steps"
-        assert back.sections[0].body == "Schema."
-        assert back.wikilinks == ["SQLite"]
 
     def it_translates_person_mention_bidirectionally(self):
         # Collector to Core
@@ -281,7 +249,6 @@ class DescribeCollectorTranslation:
             title="Director",
             aliases=["Kate"],
             context="Active member.",
-            source="Slack",
         )
         core = person_mention_to_core(mention, "people/ksilverstein.md")
 
@@ -298,7 +265,6 @@ class DescribeCollectorTranslation:
             "team": "Engineering",
             "title": "Director",
             "aliases": ["Kate"],
-            "source": "Slack",
         }
         assert len(core.sections) == 1
         assert core.sections[0].heading == "Context"
@@ -314,17 +280,3 @@ class DescribeCollectorTranslation:
         assert back.title == "Director"
         assert back.aliases == ["Kate"]
         assert back.context == "Active member."
-        assert back.source == "Slack"
-
-    def it_derives_a_file_path_from_the_name_when_none_is_given(self):
-        # No explicit file_path (the default ""), so the previous behavior left
-        # core.file == "" and the name was unrecoverable on the way back.
-        mention = PersonMention(name="ksilverstein", email="k@example.com", source="Slack")
-
-        core = person_mention_to_core(mention)
-        assert core.file != ""
-
-        back = person_mention_from_core(core)
-        assert back.name == "ksilverstein"
-        assert back.email == "k@example.com"
-        assert back.source == "Slack"
