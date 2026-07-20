@@ -8,10 +8,10 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "click>=8.1",
+    "click>=8.4.2",
     "textual>=8.2.8",
     "pyyaml>=6.0.3",
-    "pydantic>=2.12",
+    "pydantic>=2.13.4",
     "pyobjc-framework-EventKit>=12.2.1 ; sys_platform == 'darwin'",
 ]
 
@@ -25,9 +25,9 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
-    "pytest-asyncio>=0.23",
-    "textual-dev>=1.5",
-    "ruff>=0.4",
+    "pytest-asyncio>=1.4.0",
+    "textual-dev>=1.8.0",
+    "ruff>=0.15.22",
 ]
 
 [tool.ruff]
