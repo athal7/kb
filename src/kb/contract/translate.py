@@ -83,7 +83,7 @@ def _translate_section(section: CoreSection) -> Section:
 
 def _ref_from_file(file: str) -> str:
     """Vault-relative file path with its extension stripped, e.g.
-    `projects/firewall.md` -> `projects/firewall`.
+    `projects/lumen-sentinel.md` -> `projects/lumen-sentinel`.
     """
     return PurePosixPath(file).with_suffix("").as_posix()
 

@@ -16,7 +16,7 @@ SAMPLE = """# Open Action Items
 - [ ] **Team**: sync name updated
 
 ## From 2026-07-02 (Lumen Check-in)
-- [x] **Diego**: Complete Vertex AI deployment — done 2026-07-07
+- [x] **Diego**: Complete Meridian AI deployment — done 2026-07-07
 - [ ] **Priya**: Follow up with [[Firefox]] team — see [PR](https://x/1) LUMEN-1732
 
 ## Ongoing / Unresolved

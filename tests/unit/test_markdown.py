@@ -1,6 +1,6 @@
 """Markdown body parsing: heading-agnostic sections + checkbox items.
 
-Journal files use variant `##` headings that differ day to day (`## Odin`,
+Journal files use variant `##` headings that differ day to day (`## Lumen`,
 `## Warden`, `## Meetings`) and often lack any given section. The parser must
 never assume a specific heading exists; it splits whatever headings are present
 into an ordered list and lets callers look one up optionally.
@@ -86,13 +86,13 @@ class DescribeParseCheckboxes:
 
 class DescribeFindWikilinks:
     def it_finds_all_wikilink_targets_with_line_numbers(self):
-        body = "see [[Kate]] and [[Odin]]\nand [[Josh Porter]] too\n"
+        body = "see [[Priya]] and [[Lumen]]\nand [[Josh Porter]] too\n"
 
         links = find_wikilinks(body)
 
         assert [(w.raw_text, w.line_no) for w in links] == [
-            ("Kate", 0),
-            ("Odin", 0),
+            ("Priya", 0),
+            ("Lumen", 0),
             ("Josh Porter", 1),
         ]
 

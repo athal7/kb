@@ -80,7 +80,7 @@ The `kb query` subcommand performs advanced searching across profiles and docume
   ```
 - **Relationship traversal (e.g., find projects related to a person):**
   ```bash
-  kb query -r "people/andrew-thal" --relationship projects
+  kb query -r "people/marcus-webb" --relationship projects
   ```
 
 ---
@@ -98,7 +98,7 @@ When updating or reading the KB, you must adhere to the following domain concept
 
 ### 2. Resolution Maps and Alias-Aware Search
 - Variant names (like nicknames, initials, or old product handles) are mapped to canonical keys in resolution map files (`names.json`, `projects.json`, `product-labels.json`).
-- If a query uses an alias like `athal`, the search resolves it to the canonical ref `people/andrew-thal` and includes that record, even if the literal text `athal` is not in the markdown file.
+- If a query uses an alias like `mwebb`, the search resolves it to the canonical ref `people/marcus-webb` and includes that record, even if the literal text `mwebb` is not in the markdown file.
 - Suppress sentinel: empty canonical strings (`""`) in mapping files indicate that the entry should be ignored/suppressed rather than treated as a missing lookup.
 
 ### 3. Invariants and Section Caps

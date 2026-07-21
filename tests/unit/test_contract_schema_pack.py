@@ -38,10 +38,10 @@ class DescribeSection:
 
 class DescribeRelationship:
     def it_holds_a_name_and_a_target_ref(self):
-        relationship = Relationship(name="projects", target="ref:project:firewall")
+        relationship = Relationship(name="projects", target="ref:project:lumen-sentinel")
 
         assert relationship.name == "projects"
-        assert relationship.target == "ref:project:firewall"
+        assert relationship.target == "ref:project:lumen-sentinel"
 
     def it_rejects_a_relationship_missing_a_target(self):
         with pytest.raises(ValidationError):
@@ -55,14 +55,14 @@ class DescribeProfile:
             kind="person",
             fields={"email": "k@example.com", "team": "Research"},
             sections=[Section(heading="Current", body="ML researcher")],
-            relationships=[Relationship(name="projects", target="ref:project:firewall")],
+            relationships=[Relationship(name="projects", target="ref:project:lumen-sentinel")],
         )
 
         assert profile.ref == "ref:person:panand"
         assert profile.kind == "person"
         assert profile.fields["team"] == "Research"
         assert profile.sections[0].heading == "Current"
-        assert profile.relationships[0].target == "ref:project:firewall"
+        assert profile.relationships[0].target == "ref:project:lumen-sentinel"
 
     def it_defaults_sections_and_relationships_to_empty(self):
         profile = Profile(ref="ref:person:x", kind="person", fields={})

@@ -82,10 +82,10 @@ class DescribeProjectLookup:
 
 class DescribeBuildWarnings:
     def it_flags_a_dangling_canonical_in_projects_json(self):
-        # projects.json: "legacy-name" -> "Ghost Project", which no file registers.
+        # projects.json: "retired-slug" -> "Retired Project", which no file registers.
         index = VaultIndex.build(VAULT)
 
-        assert any("legacy-name" in w and "Ghost Project" in w for w in index.warnings)
+        assert any("retired-slug" in w and "Retired Project" in w for w in index.warnings)
 
     def it_does_not_flag_a_suppression_as_dangling(self):
         index = VaultIndex.build(VAULT)

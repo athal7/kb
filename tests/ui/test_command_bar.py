@@ -257,7 +257,7 @@ class DescribeGotoCommand:
             await _submit(pilot, "goto na")
 
         assert calls
-        message, kwargs = calls[-1]
+        message, _kwargs = calls[-1]
         assert message.startswith("Did you mean: ")
         assert "Elena" in message
         assert "Priya Anand" in message

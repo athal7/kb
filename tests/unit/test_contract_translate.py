@@ -70,7 +70,9 @@ class DescribePersonToProfile:
         resolver = _FakeResolver(
             {
                 ("Sentinel", EntityKind.PROJECT): EntityRef(
-                    canonical="firewall", kind=EntityKind.PROJECT, file="projects/firewall.md"
+                    canonical="lumen-sentinel",
+                    kind=EntityKind.PROJECT,
+                    file="projects/lumen-sentinel.md",
                 )
             }
         )
@@ -88,12 +90,12 @@ class DescribePersonToProfile:
         assert profile.sections[0].heading == "Current"
         assert profile.sections[0].body == "ML researcher"
         assert [r.model_dump() for r in profile.relationships] == [
-            {"name": "projects", "target": "projects/firewall"}
+            {"name": "projects", "target": "projects/lumen-sentinel"}
         ]
 
     def it_translates_a_person_with_no_project_links_to_no_relationships(self):
         person = Person(
-            file="people/andre.md",
+            file="people/elena.md",
             frontmatter={},
             email=None,
             team=None,
@@ -111,7 +113,7 @@ class DescribePersonToProfile:
 
     def it_falls_back_to_the_raw_wikilink_text_when_a_link_does_not_resolve(self):
         person = Person(
-            file="people/andre.md",
+            file="people/elena.md",
             frontmatter={},
             email=None,
             team=None,
@@ -120,7 +122,7 @@ class DescribePersonToProfile:
             aliases=[],
             project_links=[
                 Wikilink(
-                    raw_text="Some Dead Link", source_file="people/andre.md", source_line=1
+                    raw_text="Some Dead Link", source_file="people/elena.md", source_line=1
                 )
             ],
             sections=[],
@@ -136,19 +138,19 @@ class DescribePersonToProfile:
 class DescribeProjectToProfile:
     def it_translates_a_project_into_a_profile_with_matching_field_values(self):
         project = Project(
-            file="projects/firewall.md",
+            file="projects/lumen-sentinel.md",
             frontmatter={"status": "active"},
             status="active",
             product_link=Wikilink(
-                raw_text="Odin", source_file="projects/firewall.md", source_line=1
+                raw_text="LUMEN", source_file="projects/lumen-sentinel.md", source_line=1
             ),
-            github="athal7/firewall",
-            linear="FIRE",
+            github="lumen-labs/lumen-sentinel",
+            linear="SENT",
             aliases=["Sentinel"],
             people_links=[
                 Wikilink(
                     raw_text="Priya Anand",
-                    source_file="projects/firewall.md",
+                    source_file="projects/lumen-sentinel.md",
                     source_line=3,
                 )
             ],
@@ -156,8 +158,8 @@ class DescribeProjectToProfile:
         )
         resolver = _FakeResolver(
             {
-                ("Odin", EntityKind.PRODUCT): EntityRef(
-                    canonical="odin", kind=EntityKind.PRODUCT, file="products/odin.md"
+                ("LUMEN", EntityKind.PRODUCT): EntityRef(
+                    canonical="lumen", kind=EntityKind.PRODUCT, file="products/lumen.md"
                 ),
                 ("Priya Anand", EntityKind.PERSON): EntityRef(
                     canonical="panand",
@@ -171,14 +173,14 @@ class DescribeProjectToProfile:
 
         assert isinstance(profile, Profile)
         assert profile.kind == "project"
-        assert profile.ref == "projects/firewall"
+        assert profile.ref == "projects/lumen-sentinel"
         assert profile.fields["status"] == "active"
-        assert profile.fields["github"] == "athal7/firewall"
-        assert profile.fields["linear"] == "FIRE"
+        assert profile.fields["github"] == "lumen-labs/lumen-sentinel"
+        assert profile.fields["linear"] == "SENT"
         assert profile.fields["aliases"] == ["Sentinel"]
         assert profile.sections[0].heading == "Status"
         assert profile.sections[0].body == "on track"
-        assert {"name": "product", "target": "products/odin"} in [
+        assert {"name": "product", "target": "products/lumen"} in [
             r.model_dump() for r in profile.relationships
         ]
         assert {"name": "people", "target": "people/panand"} in [
@@ -187,7 +189,7 @@ class DescribeProjectToProfile:
 
     def it_translates_a_project_with_no_product_link_to_only_people_relationships(self):
         project = Project(
-            file="projects/webservices.md",
+            file="projects/atlas.md",
             frontmatter={},
             status=None,
             product_link=None,

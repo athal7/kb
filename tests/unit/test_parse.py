@@ -7,8 +7,9 @@ vault's real-world drift so nothing downstream has to:
   - `slack:` vs `slack_id:` — the SKILL doc says `slack`, real files use `slack_id`;
     both must land in one `slack_id` field.
   - Frontmatter may be entirely absent (journal, decisions) — parsing must not raise.
-  - Frontmatter list fields hold wikilink strings (`"[[Priya]]"`) that must be unwrapped
-    to raw targets for later resolution, tolerating stray brackets/whitespace.
+  - Relationship list fields (e.g. `projects`) hold wikilink strings (`"[[Priya]]"`) that
+    must be unwrapped to raw targets for later resolution, tolerating stray
+    brackets/whitespace; alias lists hold bare strings and pass through unchanged.
   - Journals have no fixed heading schema and no frontmatter; the H1 date is the identity.
 """
 

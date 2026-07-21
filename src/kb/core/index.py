@@ -205,7 +205,7 @@ class VaultIndex:
 
         A typo/partial-tolerant fallback for when exact/alias resolution misses:
         every registered name (canonical + H1 title + aliases) is scored with
-        difflib's ratio, a substring hit counts as a strong match so `kate`
+        difflib's ratio, a substring hit counts as a strong match so `priya`
         surfaces `Priya Anand`, and each entity is kept once at its best
         score. Below `_FUZZY_CUTOFF` is dropped as noise. Ordered best-first.
         """
@@ -235,7 +235,7 @@ class VaultIndex:
                 return 1.0
             ratio = SequenceMatcher(None, folded_query, candidate).ratio()
             if folded_query in candidate:
-                # A clean substring (e.g. "kate" in "kate silverstein") is a
+                # A clean substring (e.g. "priya" in "priya anand") is a
                 # strong intent signal that raw ratio underweights for short
                 # queries against long names — floor it, but never let it beat
                 # a closer whole-name ratio elsewhere.
