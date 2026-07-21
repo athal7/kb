@@ -18,7 +18,6 @@ a config edit takes effect on the next launch, not the next refresh keypress.
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import click
@@ -148,114 +147,146 @@ def people_show(ctx: click.Context, name: str) -> None:
     click.echo(json.dumps(_person_to_dict(person), indent=2))
 
 
-@cli.command("query")
-@click.option("-t", "--text", help="Substring/full-text search text")
-@click.option("-f", "--filter", "filters", multiple=True, help="Field filters, e.g. status=active")
-@click.option(
-    "-c",
-    "--collection",
-    "collections",
-    multiple=True,
-    help="Collection scope, e.g. people",
-)
-@click.option("-r", "--related-to", help="Filter by relationship target ref")
-@click.option("--relationship", help="Filter by relationship name")
-@click.option("-l", "--limit", type=int, help="Limit number of results")
-@click.option("--json", "json_str", help="QueryRequest as raw JSON string")
-@click.pass_context
-def query_cmd(
-    ctx: click.Context,
-    text: str | None,
-    filters: list[str],
-    collections: list[str],
-    related_to: str | None,
-    relationship: str | None,
-    limit: int | None,
-    json_str: str | None,
-) -> None:
-    """Query and search the KB vault."""
-    from kb.contract.query import QueryFilter, QueryRequest
-    from kb.core.engine import Engine
-
-    try:
-        kb_root = resolve_kb_root(None, validate=True)
-        engine = Engine(kb_root)
-    except Exception as e:
-        from kb.contract.envelope import ErrorResponse
-        from kb.contract.errors import ContractError
-        err = ErrorResponse(
-            error=ContractError.io(
-                path="",
-                message=f"Failed to load KB: {e}"
-            )
-        )
-        click.echo(err.model_dump_json(indent=2 if sys.stdout.isatty() else None))
-        ctx.exit(1)
-
-    if json_str is not None:
-        try:
-            req = QueryRequest.model_validate_json(json_str)
-        except Exception as e:
-            from kb.contract.envelope import ErrorResponse
-            from kb.contract.errors import ContractError
-            err = ErrorResponse(
-                error=ContractError.validation(
-                    path="/",
-                    message=f"Invalid QueryRequest JSON: {e}",
-                    code="validation.invariant"
-                )
-            )
-            click.echo(err.model_dump_json(indent=2 if sys.stdout.isatty() else None))
-            ctx.exit(1)
-    else:
-        parsed_filters = []
-        for flt in filters:
-            op = "="
-            field = flt
-            val = ""
-            for possible_op in [">=", "<=", "!=", "=", ">", "<", "contains"]:
-                if possible_op in flt:
-                    parts = flt.split(possible_op, 1)
-                    field = parts[0].strip()
-                    op = possible_op
-                    val = parts[1].strip()
-                    break
-            parsed_filters.append(QueryFilter(field=field, op=op, value=val))
-
-        req = QueryRequest(
-            text=text,
-            filters=parsed_filters,
-            collections=list(collections),
-            related_to=related_to,
-            relationship=relationship,
-            limit=limit,
-        )
-
-    response = engine.query(req)
-
-    indent = 2 if sys.stdout.isatty() else None
-    click.echo(response.model_dump_json(indent=indent))
-    if not response.ok:
-        ctx.exit(1)
-
-
 @cli.group()
-def contract() -> None:
-    """Introspect the KB Contract."""
+def journal() -> None:
+    """Manage journal entries in the vault."""
 
 
-@contract.command("version")
-def contract_version() -> None:
-    """Print the contract version."""
-    from kb.contract.version import CONTRACT_VERSION
-    click.echo(CONTRACT_VERSION)
+@journal.command("append")
+@click.option(
+    "--date",
+    "date_str",
+    help="The date of the journal entry (YYYY-MM-DD). Defaults to today."
+)
+@click.option("--section", help="The section heading to append to (e.g., 'Git Activity').")
+@click.option("--content", help="The content to append. Reads from stdin if not provided or '-'.")
+@click.pass_context
+def journal_append(
+    ctx: click.Context,
+    date_str: str | None,
+    section: str | None,
+    content: str | None
+) -> None:
+    """Append content to a daily journal entry, optionally under a specific section."""
+    import re
+    from datetime import date as datetime_date
 
+    from kb.contract import CONTRACT_VERSION
 
-@contract.command("schema")
-def contract_schema_cmd() -> None:
-    """Print the contract's JSON Schema."""
-    from kb.contract.schema import contract_schema
-    click.echo(json.dumps(contract_schema(), indent=2))
+    if date_str is None:
+        date_str = datetime_date.today().strftime("%Y-%m-%d")
+    else:
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_str):
+            err_resp = {
+                "contract_version": CONTRACT_VERSION,
+                "ok": False,
+                "error": {
+                    "code": "validation.invalid_date",
+                    "message": f"Invalid date format: {date_str}. Must be YYYY-MM-DD.",
+                    "path": "/date",
+                    "retryable": False
+                },
+                "warnings": []
+            }
+            click.echo(json.dumps(err_resp, indent=2), err=True)
+            ctx.exit(1)
+
+    if content is None or content == "-":
+        import sys
+        content = sys.stdin.read()
+
+    kb_root = resolve_kb_root(None, validate=True)
+    journal_dir = kb_root / "journal"
+    journal_dir.mkdir(parents=True, exist_ok=True)
+    journal_file = journal_dir / f"{date_str}.md"
+
+    # Read existing content or start fresh
+    if journal_file.is_file():
+        file_text = journal_file.read_text(encoding="utf-8")
+    else:
+        file_text = f"# {date_str}\n"
+
+    from kb.core.markdown import Section, split_sections
+
+    sections = split_sections(file_text)
+
+    # Ensure we have the initial H1 section if it's a new file or doesn't have it
+    has_h1 = any(s.level == 1 for s in sections)
+    if not has_h1:
+        sections.insert(0, Section(heading=date_str, level=1, lines=[]))
+
+    content_lines = [line for line in content.split("\n")]
+    if content_lines and content_lines[-1] == "":
+        content_lines.pop()
+
+    if section:
+        target_section = None
+        for s in sections:
+            if s.level == 2 and s.heading and s.heading.strip().lower() == section.strip().lower():
+                target_section = s
+                break
+
+        if target_section is not None:
+            new_lines = list(target_section.lines)
+            if new_lines and new_lines[-1] != "":
+                new_lines.append("")
+            new_lines.extend(content_lines)
+            idx = sections.index(target_section)
+            sections[idx] = Section(
+                heading=target_section.heading,
+                level=target_section.level,
+                lines=new_lines
+            )
+        else:
+            sections.append(Section(heading=section, level=2, lines=content_lines))
+    else:
+        if sections:
+            last_section = sections[-1]
+            new_lines = list(last_section.lines)
+            if new_lines:
+                if new_lines[-1] != "":
+                    new_lines.append("")
+            else:
+                if last_section.level == 1:
+                    new_lines.append("")
+            new_lines.extend(content_lines)
+            sections[-1] = Section(
+                heading=last_section.heading,
+                level=last_section.level,
+                lines=new_lines
+            )
+        else:
+            sections.append(Section(heading=None, level=0, lines=content_lines))
+
+    # Serialize sections back to markdown
+    parts = []
+    for s in sections:
+        part = []
+        if s.heading is not None:
+            part.append(f"{'#' * s.level} {s.heading}")
+        part.extend(s.lines)
+        parts.append("\n".join(part))
+
+    new_text = "\n\n".join(parts)
+    if not new_text.endswith("\n"):
+        new_text += "\n"
+
+    # Write back to disk
+    journal_file.write_text(new_text, encoding="utf-8")
+
+    # Success Response Envelope
+    success_resp = {
+        "contract_version": CONTRACT_VERSION,
+        "ok": True,
+        "data": {
+            "file": f"journal/{date_str}.md",
+            "date": date_str,
+            "section": section,
+            "bytes_written": len(new_text)
+        },
+        "warnings": []
+    }
+    click.echo(json.dumps(success_resp, indent=2))
 
 
 def main() -> None:
