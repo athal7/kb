@@ -22,6 +22,26 @@ import threading
 import time
 from datetime import datetime, timedelta
 
+try:
+    import EventKit
+except ImportError:
+    class DummyEventKit:
+        EKAuthorizationStatusNotDetermined = 0
+        EKAuthorizationStatusRestricted = 1
+        EKAuthorizationStatusDenied = 2
+        EKAuthorizationStatusFullAccess = 3
+        EKEntityTypeEvent = 0
+        EKEntityTypeReminder = 1
+        class EKEventStore:
+            @classmethod
+            def alloc(cls):
+                return cls()
+            def init(self):
+                return self
+            @classmethod
+            def authorizationStatusForEntityType_(cls, entity_type):
+                return 0  # EKAuthorizationStatusNotDetermined
+    EventKit = DummyEventKit  # type: ignore
 if sys.platform == "darwin":
     import EventKit
 else:
