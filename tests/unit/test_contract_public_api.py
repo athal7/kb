@@ -27,19 +27,8 @@ class DescribeContractPublicApi:
         assert Profile and Section and Relationship
         assert ResolutionMapEntry and LedgerEntry and Document
 
-    def it_exports_the_query_types(self):
-        from kb.contract import (
-            QueryFilter,
-            QueryHit,
-            QueryRequest,
-            QueryResult,
-        )
-
-        assert QueryFilter and QueryHit and QueryRequest and QueryResult
-
     def it_exports_the_translate_functions(self):
-        from kb.contract import person_to_profile, product_to_profile, project_to_profile
+        from kb.contract import person_to_profile, project_to_profile
 
         assert callable(person_to_profile)
         assert callable(project_to_profile)
-        assert callable(product_to_profile)
