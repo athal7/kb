@@ -240,6 +240,67 @@ def query_cmd(
 
 
 @cli.group()
+def journal() -> None:
+    """Manage journal entries in the vault."""
+
+
+@journal.command("append")
+@click.option(
+    "--date",
+    "date_str",
+    help="The date of the journal entry (YYYY-MM-DD). Defaults to today.",
+)
+@click.option("--section", help="The section heading to append to (e.g., 'Git Activity').")
+@click.option("--content", help="The content to append. Reads from stdin if not provided or '-'.")
+@click.pass_context
+def journal_append(
+    ctx: click.Context,
+    date_str: str | None,
+    section: str | None,
+    content: str | None,
+) -> None:
+    """Append content to a daily journal entry, optionally under a specific section."""
+    from datetime import date as datetime_date
+
+    from kb.contract.collector import JournalEntry
+    from kb.contract.schema_pack import Section
+    from kb.core.engine import Engine
+
+    if date_str is None:
+        date_str = datetime_date.today().strftime("%Y-%m-%d")
+
+    if content is None or content == "-":
+        content = sys.stdin.read()
+
+    if section:
+        entry = JournalEntry(date=date_str, sections=[Section(heading=section, body=content)])
+    else:
+        entry = JournalEntry(date=date_str, body=content)
+
+    try:
+        kb_root = resolve_kb_root(None, validate=True)
+        engine = Engine(kb_root)
+    except Exception as e:
+        from kb.contract.envelope import ErrorResponse
+        from kb.contract.errors import ContractError
+        err = ErrorResponse(
+            error=ContractError.io(
+                path="",
+                message=f"Failed to load KB: {e}"
+            )
+        )
+        click.echo(err.model_dump_json(indent=2 if sys.stdout.isatty() else None))
+        ctx.exit(1)
+
+    response = engine.write_journal_entry(entry)
+
+    indent = 2 if sys.stdout.isatty() else None
+    click.echo(response.model_dump_json(indent=indent))
+    if not response.ok:
+        ctx.exit(1)
+
+
+@cli.group()
 def contract() -> None:
     """Introspect the KB Contract."""
 
