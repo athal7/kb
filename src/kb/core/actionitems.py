@@ -3,7 +3,7 @@
 The file is the Phase 1 / Phase 2 seam. It is a flat list of `## From <date> (source)`
 groups plus an `## Ongoing / Unresolved` group, each holding `- [ ]` / `- [x]` items.
 Items carry inline `[[wikilinks]]`, markdown `[text](url)` links, and plain-text Linear
-refs (e.g. `0DIN-1732`), and are inconsistently prefixed with `**Person**:`.
+refs (e.g. `LUMEN-1732`), and are inconsistently prefixed with `**Person**:`.
 
 Editing is line-surgical: the file's exact lines are retained and a toggle rewrites only
 the single `[ ]`/`[x]` marker on the target line. We never round-trip through a markdown

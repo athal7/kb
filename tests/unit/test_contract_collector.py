@@ -38,7 +38,7 @@ class DescribeCollectorActionItem:
         item = ActionItem(
             text="Sync on Firebase",
             checked=True,
-            person_prefix="Kate",
+            person_prefix="Priya",
             source_group="Slack",
             wikilinks=["Firebase"],
             external_links=["https://firebase.google.com"],
@@ -46,7 +46,7 @@ class DescribeCollectorActionItem:
         )
         assert item.text == "Sync on Firebase"
         assert item.checked is True
-        assert item.person_prefix == "Kate"
+        assert item.person_prefix == "Priya"
         assert item.source_group == "Slack"
         assert item.wikilinks == ["Firebase"]
         assert item.external_links == ["https://firebase.google.com"]
@@ -67,14 +67,14 @@ class DescribeCollectorDecision:
             title="Adopt SQLite",
             date="2026-07-16",
             status="accepted",
-            deciders=["Stephen", "Kate"],
+            deciders=["Diego", "Priya"],
             body="Use SQLite for storage.",
             sections=[Section(heading="Rationale", body="It is serverless.")],
         )
         assert dec.title == "Adopt SQLite"
         assert dec.date == "2026-07-16"
         assert dec.status == "accepted"
-        assert dec.deciders == ["Stephen", "Kate"]
+        assert dec.deciders == ["Diego", "Priya"]
         assert dec.body == "Use SQLite for storage."
         assert dec.sections[0].heading == "Rationale"
 
@@ -98,35 +98,35 @@ class DescribeCollectorMeetingNote:
         note = MeetingNote(
             title="Design Sync",
             date="2026-07-16",
-            participants=["Stephen", "Kate"],
+            participants=["Diego", "Priya"],
             body="Discussed SQLite.",
             sections=[Section(heading="Next Steps", body="Create schemas.")],
             wikilinks=["SQLite"],
         )
         assert note.title == "Design Sync"
-        assert note.participants == ["Stephen", "Kate"]
+        assert note.participants == ["Diego", "Priya"]
         assert note.sections[0].heading == "Next Steps"
 
 
 class DescribeCollectorPersonMention:
     def it_validates_correct_inputs(self):
         mention = PersonMention(
-            name="ksilverstein",
+            name="panand",
             email="k@example.com",
             slack_id="U123",
             team="Engineering",
             title="Director",
-            aliases=["Kate"],
-            context="Mentioned by Stephen",
+            aliases=["Priya"],
+            context="Mentioned by Diego",
             source="Slack",
         )
-        assert mention.name == "ksilverstein"
+        assert mention.name == "panand"
         assert mention.email == "k@example.com"
         assert mention.slack_id == "U123"
         assert mention.team == "Engineering"
         assert mention.title == "Director"
-        assert mention.aliases == ["Kate"]
-        assert mention.context == "Mentioned by Stephen"
+        assert mention.aliases == ["Priya"]
+        assert mention.context == "Mentioned by Diego"
         assert mention.source == "Slack"
 
 
@@ -143,23 +143,23 @@ class DescribeCollectorTranslation:
         item = ActionItem(
             text="Do task",
             checked=True,
-            person_prefix="Kate",
+            person_prefix="Priya",
             source_group="Standup",
-            wikilinks=["Odin"],
+            wikilinks=["Lumen"],
             external_links=["http://x"],
-            linear_refs=["ODIN-1"],
+            linear_refs=["LUMEN-1"],
         )
         core = action_item_to_core(item)
 
         assert isinstance(core, CoreActionItem)
         assert core.text == "Do task"
         assert core.checked is True
-        assert core.person_prefix == "Kate"
+        assert core.person_prefix == "Priya"
         assert core.source_group == "Standup"
-        assert core.wikilinks == ["Odin"]
+        assert core.wikilinks == ["Lumen"]
         assert core.external_links == ["http://x"]
-        assert core.linear_refs == ["ODIN-1"]
-        assert core.raw_line == "- [x] **Kate**: Do task"
+        assert core.linear_refs == ["LUMEN-1"]
+        assert core.raw_line == "- [x] **Priya**: Do task"
         assert core.line_no == -1
 
     def it_translates_decision_bidirectionally(self):
@@ -168,7 +168,7 @@ class DescribeCollectorTranslation:
             title="Adopt SQLite",
             date="2026-07-16",
             status="accepted",
-            deciders=["Stephen", "Kate"],
+            deciders=["Diego", "Priya"],
             body="Use SQLite.",
             sections=[Section(heading="Rationale", body="Serverless.")],
         )
@@ -240,7 +240,7 @@ class DescribeCollectorTranslation:
         note = MeetingNote(
             title="Design Sync",
             date="2026-07-16",
-            participants=["Stephen", "Kate"],
+            participants=["Diego", "Priya"],
             body="Review SQLite.",
             sections=[Section(heading="Next Steps", body="Schema.")],
             wikilinks=["SQLite"],
@@ -285,31 +285,31 @@ class DescribeCollectorTranslation:
     def it_translates_person_mention_bidirectionally(self):
         # Collector to Core
         mention = PersonMention(
-            name="ksilverstein",
+            name="panand",
             email="k@example.com",
             slack_id="U123",
             team="Engineering",
             title="Director",
-            aliases=["Kate"],
+            aliases=["Priya"],
             context="Active member.",
             source="Slack",
         )
-        core = person_mention_to_core(mention, "people/ksilverstein.md")
+        core = person_mention_to_core(mention, "people/panand.md")
 
         assert isinstance(core, CorePerson)
-        assert core.file == "people/ksilverstein.md"
+        assert core.file == "people/panand.md"
         assert core.email == "k@example.com"
         assert core.slack_id == "U123"
         assert core.team == "Engineering"
         assert core.title == "Director"
-        assert core.aliases == ["Kate"]
+        assert core.aliases == ["Priya"]
         assert core.frontmatter == {
-            "name": "ksilverstein",
+            "name": "panand",
             "email": "k@example.com",
             "slack_id": "U123",
             "team": "Engineering",
             "title": "Director",
-            "aliases": ["Kate"],
+            "aliases": ["Priya"],
             "source": "Slack",
         }
         assert len(core.sections) == 1
@@ -319,12 +319,12 @@ class DescribeCollectorTranslation:
         # Core back to Collector
         back = person_mention_from_core(core)
         assert isinstance(back, PersonMention)
-        assert back.name == "ksilverstein"
+        assert back.name == "panand"
         assert back.email == "k@example.com"
         assert back.slack_id == "U123"
         assert back.team == "Engineering"
         assert back.title == "Director"
-        assert back.aliases == ["Kate"]
+        assert back.aliases == ["Priya"]
         assert back.context == "Active member."
         assert back.source == "Slack"
 
@@ -332,22 +332,22 @@ class DescribeCollectorTranslation:
         # An explicit file_path need not be a slug of name (e.g. a vault file
         # named before a person's display name changed). Recovering name from
         # the file stem in that case would silently mangle it.
-        mention = PersonMention(name="Kate Silverstein", email="k@example.com")
-        core = person_mention_to_core(mention, "people/ksilverstein.md")
+        mention = PersonMention(name="Priya Anand", email="k@example.com")
+        core = person_mention_to_core(mention, "people/panand.md")
 
         back = person_mention_from_core(core)
 
-        assert back.name == "Kate Silverstein"
+        assert back.name == "Priya Anand"
 
     def it_derives_a_file_path_from_the_name_when_none_is_given(self):
         # No explicit file_path (the default ""), so the previous behavior left
         # core.file == "" and the name was unrecoverable on the way back.
-        mention = PersonMention(name="ksilverstein", email="k@example.com", source="Slack")
+        mention = PersonMention(name="panand", email="k@example.com", source="Slack")
 
         core = person_mention_to_core(mention)
         assert core.file != ""
 
         back = person_mention_from_core(core)
-        assert back.name == "ksilverstein"
+        assert back.name == "panand"
         assert back.email == "k@example.com"
         assert back.source == "Slack"

@@ -27,14 +27,14 @@ VAULT = Path(__file__).resolve().parents[1] / "fixtures" / "vault"
 ACTION_ITEMS_SAMPLE = """# Open Action Items
 
 ## From 2026-07-13 (Slack)
-- [ ] **Stephen**: Ship the dashboard
-- [x] **Stephen**: Already done, should not show
+- [ ] **Diego**: Ship the dashboard
+- [x] **Diego**: Already done, should not show
 
-## From 2026-07-07 (0din Check-in)
-- [ ] **Kate**: Follow up with [[Firewall]] team — see [PR](https://x/1) 0DIN-1732
+## From 2026-07-07 (Lumen Check-in)
+- [ ] **Priya**: Follow up with [[Sentinel]] team — see [PR](https://x/1) LUMEN-1732
 
 ## Ongoing / Unresolved
-- [ ] Venezuela logistics — fluid situation
+- [ ] Storage migration — vendor timeline shifting
 """
 
 
@@ -139,7 +139,7 @@ class DescribeActionItemsPane:
 
         assert groups == [
             "From 2026-07-13 (Slack)",
-            "From 2026-07-07 (0din Check-in)",
+            "From 2026-07-07 (Lumen Check-in)",
             "Ongoing / Unresolved",
         ]
 
@@ -152,9 +152,9 @@ class DescribeActionItemsPane:
             ]
 
         assert item_texts == [
-            "- **Stephen**: Ship the dashboard",
-            "- **Kate**: Follow up with [[Firewall]] team — see [PR](https://x/1) 0DIN-1732",
-            "- Venezuela logistics — fluid situation",
+            "- **Diego**: Ship the dashboard",
+            "- **Priya**: Follow up with [[Sentinel]] team — see [PR](https://x/1) LUMEN-1732",
+            "- Storage migration — vendor timeline shifting",
         ]
 
     async def it_shows_an_empty_state_when_there_are_no_open_items(self):
@@ -380,7 +380,7 @@ class DescribePaneStyling:
         assert pane.styles.overflow_y == "auto"
 
     async def it_wraps_long_action_item_text_instead_of_clipping_it(self):
-        long_text = "Andrew Thal's CHANGES_REQUESTED " * 10
+        long_text = "Marcus Webb's CHANGES_REQUESTED " * 10
         items = ActionItemsFile.parse(
             f"# Open Action Items\n\n## Ongoing / Unresolved\n- [ ] {long_text}\n"
         ).items

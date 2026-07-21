@@ -5,7 +5,7 @@ title, frontmatter aliases). The resolver layers the vault's JSON lookup tables 
 a raw reference may resolve directly, or indirectly through a table whose value is
 another known name, or be explicitly suppressed (table value ""), ambiguous, or absent.
 
-Case-folding is applied for lookups so `[[Kate]]`, `[[kate]]`, `[[KATE]]` all resolve.
+Case-folding is applied for lookups so `[[Priya]]`, `[[priya]]`, `[[PRIYA]]` all resolve.
 """
 
 from __future__ import annotations

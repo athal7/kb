@@ -1,9 +1,9 @@
 ---
 type: person
-email: andre@example.com
+email: elena@example.com
 team: Design
 aliases:
-  - Andre
+  - Elena
 last_updated: 2026-06-01
 ---
-# Andre
+# Elena

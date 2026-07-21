@@ -19,7 +19,7 @@ class DescribeSplit:
         assert result.warning is None
 
     def it_returns_none_frontmatter_when_absent(self):
-        text = "# 2026-07-13\n\n## Odin\n- did a thing\n"
+        text = "# 2026-07-13\n\n## Lumen\n- did a thing\n"
 
         result = split(text)
 
