@@ -1,11 +1,11 @@
 # Open Action Items
 
 ## From 2026-07-13 (Slack)
-- [ ] **Stephen**: Review the [[Firewall]] rollout plan
-- [x] **Stephen**: Already done, should not appear in the dashboard
+- [ ] **Diego**: Review the [[Sentinel]] rollout plan
+- [x] **Diego**: Already done, should not appear in the dashboard
 
-## From 2026-07-07 (0din Check-in)
-- [ ] **Kate**: Follow up with [[0din]] on the Vertex AI deployment
+## From 2026-07-07 (Lumen Check-in)
+- [ ] **Priya**: Follow up with [[Lumen]] on the Vertex AI deployment
 
 ## Ongoing / Unresolved
-- [ ] Venezuela logistics — fluid situation
+- [ ] Storage migration — vendor timeline shifting

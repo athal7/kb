@@ -37,22 +37,22 @@ class DescribeBuild:
 
 class DescribePersonLookup:
     def it_resolves_a_display_name_through_names_json_to_the_file_backed_person(self):
-        # names.json: "Stephen" -> "Stephen Golub"; file is stephen-golub.md.
+        # names.json: "Diego" -> "Diego Ruiz"; file is diego-ruiz.md.
         index = VaultIndex.build(VAULT)
 
-        person = index.person("Stephen")
+        person = index.person("Diego")
 
         assert person is not None
-        assert person.file == "people/stephen-golub.md"
+        assert person.file == "people/diego-ruiz.md"
 
     def it_resolves_a_handle_through_names_json_indirection(self):
-        # names.json: "Kate Silverstein" -> "ksilverstein"; file is ksilverstein.md.
+        # names.json: "Priya Anand" -> "panand"; file is panand.md.
         index = VaultIndex.build(VAULT)
 
-        person = index.person("Kate Silverstein")
+        person = index.person("Priya Anand")
 
         assert person is not None
-        assert person.file == "people/ksilverstein.md"
+        assert person.file == "people/panand.md"
 
     def it_returns_none_for_an_unregistered_name(self):
         index = VaultIndex.build(VAULT)
@@ -62,22 +62,22 @@ class DescribePersonLookup:
 
 class DescribeProjectLookup:
     def it_resolves_a_projects_json_alias_to_the_file_backed_project(self):
-        # projects.json: "odin-firewall" -> "Firewall"; file is projects/firewall.md.
+        # projects.json: "lumen-sentinel" -> "Sentinel"; file is projects/lumen-sentinel.md.
         index = VaultIndex.build(VAULT)
 
-        project = index.project("odin-firewall")
+        project = index.project("lumen-sentinel")
 
         assert project is not None
-        assert project.file == "projects/firewall.md"
+        assert project.file == "projects/lumen-sentinel.md"
 
     def it_resolves_a_github_repo_slug_through_github_repos_json(self):
-        # github-repos.json: "repo-slug" -> "0DIN"; file is products/0din.md.
+        # github-repos.json: "repo-slug" -> "LUMEN"; file is products/lumen.md.
         index = VaultIndex.build(VAULT)
 
         product = index.product("repo-slug")
 
         assert product is not None
-        assert product.file == "products/0din.md"
+        assert product.file == "products/lumen.md"
 
 
 class DescribeBuildWarnings:
@@ -90,7 +90,7 @@ class DescribeBuildWarnings:
     def it_does_not_flag_a_suppression_as_dangling(self):
         index = VaultIndex.build(VAULT)
 
-        assert not any("webservices-infra" in w for w in index.warnings)
+        assert not any("atlas-infra" in w for w in index.warnings)
 
 
 class DescribeJournalEntries:
@@ -125,7 +125,7 @@ class DescribeResolveWikilink:
     def it_delegates_to_the_alias_resolver(self):
         index = VaultIndex.build(VAULT)
 
-        result = index.resolve_wikilink("Kate", EntityKind.PERSON)
+        result = index.resolve_wikilink("Priya", EntityKind.PERSON)
 
         assert result.status is ResolutionStatus.RESOLVED
-        assert result.entity.file == "people/ksilverstein.md"
+        assert result.entity.file == "people/panand.md"

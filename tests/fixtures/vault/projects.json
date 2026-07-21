@@ -1,8 +1,8 @@
 {
-  "odin-firewall": "Firewall",
-  "odin firewall": "Firewall",
-  "ODIN Firewall": "Firewall",
-  "webservices-infra": "",
-  "global-platform-admin": "",
+  "lumen-sentinel": "Sentinel",
+  "lumen sentinel": "Sentinel",
+  "Lumen Sentinel": "Sentinel",
+  "atlas-infra": "",
+  "core-platform-admin": "",
   "legacy-name": "Ghost Project"
 }

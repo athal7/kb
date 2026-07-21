@@ -63,10 +63,10 @@ class DescribePeopleSearchTrigger:
             search = app.screen.query_one(PeopleSearch)
 
             assert set(_result_labels(search)) == {
-                "Andre",
-                "Andrew Thal",
-                "Kate Silverstein",
-                "Stephen Golub",
+                "Elena",
+                "Marcus Webb",
+                "Priya Anand",
+                "Diego Ruiz",
             }
 
     async def it_hides_without_notifying_on_escape_and_restores_prior_focus(self):
@@ -114,10 +114,10 @@ class DescribePeopleSearchLiveFilter:
         async with app.run_test() as pilot:
             await pilot.press("slash")
             search = app.screen.query_one(PeopleSearch)
-            search.query_one(Input).value = "silverstien"
+            search.query_one(Input).value = "anandd"
             await pilot.pause()
 
-            assert _result_labels(search) == ["Kate Silverstein"]
+            assert _result_labels(search) == ["Priya Anand"]
 
     async def it_shows_an_empty_list_for_a_query_matching_nobody(self):
         app = _dashboard()
@@ -136,7 +136,7 @@ class DescribePeopleSearchLiveFilter:
         async with app.run_test() as pilot:
             await pilot.press("slash")
             search = app.screen.query_one(PeopleSearch)
-            search.query_one(Input).value = "silverstien"
+            search.query_one(Input).value = "anandd"
             await pilot.pause()
             search.query_one(Input).value = ""
             await pilot.pause()
@@ -149,7 +149,7 @@ class DescribePeopleSearchLiveFilter:
         async with app.run_test() as pilot:
             await pilot.press("slash")
             search = app.screen.query_one(PeopleSearch)
-            search.query_one(Input).value = "silverstien"
+            search.query_one(Input).value = "anandd"
             await pilot.pause()
             await pilot.press("escape")
 
@@ -168,13 +168,13 @@ class DescribePeopleSearchConfirm:
         async with app.run_test() as pilot:
             await pilot.press("slash")
             search = app.screen.query_one(PeopleSearch)
-            search.query_one(Input).value = "silverstien"
+            search.query_one(Input).value = "anandd"
             await pilot.pause()
             await pilot.press("enter")
 
         assert calls
         message, kwargs = calls[-1]
-        assert message == "Selected: Kate Silverstein"
+        assert message == "Selected: Priya Anand"
         assert kwargs.get("severity") == "information"
 
     async def it_hides_and_restores_prior_focus_after_a_confirmed_selection(self):
@@ -187,7 +187,7 @@ class DescribePeopleSearchConfirm:
 
             await pilot.press("slash")
             search = app.screen.query_one(PeopleSearch)
-            search.query_one(Input).value = "silverstien"
+            search.query_one(Input).value = "anandd"
             await pilot.pause()
             await pilot.press("enter")
 
@@ -209,8 +209,8 @@ class DescribePeopleSearchConfirm:
 
             await pilot.press("enter")
 
-        # Roster is display-sorted: Andre, Andrew Thal, Kate Silverstein, Stephen Golub.
+        # Roster is display-sorted: Diego Ruiz, Elena, Marcus Webb, Priya Anand.
         # One "down" from the first item highlights the second.
         assert calls
         message, _ = calls[-1]
-        assert message == "Selected: Andrew Thal"
+        assert message == "Selected: Elena"

@@ -31,14 +31,14 @@ class DescribeEngineQuery:
     def it_performs_substring_search_across_sections_and_fields(self):
         engine = Engine(VAULT)
 
-        # Searching for "gRPC" which is in Andrew Thal's section body
+        # Searching for "gRPC" which is in Marcus Webb's section body
         req = QueryRequest(text="gRPC")
         resp = engine.query(req)
 
         assert resp.ok is True
         assert len(resp.data.hits) > 0
         hit = resp.data.hits[0]
-        assert hit.ref == "people/andrew-thal"
+        assert hit.ref == "people/marcus-webb"
         assert hit.collection == "people"
         assert "gRPC" in hit.snippet
         assert hit.matched_in.startswith("sections")
@@ -55,7 +55,7 @@ class DescribeEngineQuery:
 
         assert resp.ok is True
         assert len(resp.data.hits) > 0
-        assert any(hit.ref == "projects/firewall" for hit in resp.data.hits)
+        assert any(hit.ref == "projects/lumen-sentinel" for hit in resp.data.hits)
         for hit in resp.data.hits:
             assert hit.collection == "projects"
             # Get the profile to assert the field
@@ -78,9 +78,9 @@ class DescribeEngineQuery:
     def it_supports_relationship_traversal_outgoing(self):
         engine = Engine(VAULT)
 
-        # Traversal: projects related to "people/andrew-thal"
+        # Traversal: projects related to "people/marcus-webb"
         req = QueryRequest(
-            related_to="people/andrew-thal",
+            related_to="people/marcus-webb",
             relationship="projects"
         )
         resp = engine.query(req)
@@ -88,14 +88,14 @@ class DescribeEngineQuery:
         assert resp.ok is True
         assert len(resp.data.hits) > 0
         refs = [h.ref for h in resp.data.hits]
-        assert "projects/firewall" in refs
+        assert "projects/lumen-sentinel" in refs
 
     def it_supports_relationship_traversal_incoming(self):
         engine = Engine(VAULT)
 
-        # Traversal: people on project "projects/firewall"
+        # Traversal: people on project "projects/lumen-sentinel"
         req = QueryRequest(
-            related_to="projects/firewall",
+            related_to="projects/lumen-sentinel",
             relationship="people"
         )
         resp = engine.query(req)
@@ -103,19 +103,19 @@ class DescribeEngineQuery:
         assert resp.ok is True
         assert len(resp.data.hits) > 0
         refs = [h.ref for h in resp.data.hits]
-        assert "people/stephen-golub" in refs or "people/andrew-thal" in refs
+        assert "people/diego-ruiz" in refs or "people/marcus-webb" in refs
 
     def it_resolves_alias_aware_query_terms(self):
         engine = Engine(VAULT)
 
-        # "athal" is an alias of "Andrew Thal"
-        req = QueryRequest(text="athal", collections=["people"])
+        # "mwebb" is an alias of "Marcus Webb"
+        req = QueryRequest(text="mwebb", collections=["people"])
         resp = engine.query(req)
 
         assert resp.ok is True
         assert len(resp.data.hits) > 0
         refs = [h.ref for h in resp.data.hits]
-        assert "people/andrew-thal" in refs
+        assert "people/marcus-webb" in refs
 
 
 class DescribeEngineWrites:
@@ -173,27 +173,27 @@ class DescribeEngineWrites:
     def it_syncs_bidirectional_relationships_upon_write(self, temp_vault):
         engine = Engine(temp_vault)
 
-        # Andre (people/andre) has no relationship to projects/webservices initially
-        # Let's save Andre with a relationship pointing to projects/webservices
-        andre = engine._get_indexed_profile("people/andre")
-        assert andre is not None
-        assert len(andre.relationships) == 0
+        # Elena (people/elena) has no relationship to projects/atlas initially
+        # Let's save Elena with a relationship pointing to projects/atlas
+        elena = engine._get_indexed_profile("people/elena")
+        assert elena is not None
+        assert len(elena.relationships) == 0
 
-        # Add projects relationship pointing to projects/webservices
-        andre.relationships.append(
-            Relationship(name="projects", target="projects/webservices")
+        # Add projects relationship pointing to projects/atlas
+        elena.relationships.append(
+            Relationship(name="projects", target="projects/atlas")
         )
 
-        resp = engine.write_profile(andre)
+        resp = engine.write_profile(elena)
         assert resp.ok is True
 
-        # Reload target and verify that projects/webservices got the inverse
-        # 'people' relationship back to Andre
-        webservices = engine._get_indexed_profile("projects/webservices")
-        assert webservices is not None
+        # Reload target and verify that projects/atlas got the inverse
+        # 'people' relationship back to Elena
+        atlas = engine._get_indexed_profile("projects/atlas")
+        assert atlas is not None
         has_inverse = any(
-            r.name == "people" and r.target == "people/andre"
-            for r in webservices.relationships
+            r.name == "people" and r.target == "people/elena"
+            for r in atlas.relationships
         )
         assert has_inverse is True
 
@@ -201,19 +201,19 @@ class DescribeEngineWrites:
         engine = Engine(temp_vault)
 
         # Save a person with new aliases
-        kate = engine._get_indexed_profile("people/ksilverstein")
-        assert kate is not None
+        priya = engine._get_indexed_profile("people/panand")
+        assert priya is not None
 
-        kate.fields["aliases"] = ["Katie", "ksilv"]
-        resp = engine.write_profile(kate)
+        priya.fields["aliases"] = ["Priyaa", "pnand"]
+        resp = engine.write_profile(priya)
         assert resp.ok is True
 
         # Read names.json and assert the aliases exist
         names_json = json.loads((temp_vault / "names.json").read_text(encoding="utf-8"))
-        assert names_json["Katie"] == "Kate Silverstein"
-        assert names_json["ksilv"] == "Kate Silverstein"
+        assert names_json["Priyaa"] == "Priya Anand"
+        assert names_json["pnand"] == "Priya Anand"
         # Old aliases not in the list should be cleaned up
-        assert "kate" not in names_json
+        assert "priya" not in names_json
 
     def it_removes_stale_alias_map_entries_after_profile_rename(self, temp_vault):
         engine = Engine(temp_vault)

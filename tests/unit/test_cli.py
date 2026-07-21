@@ -78,21 +78,21 @@ class DescribePeopleShow:
     def it_prints_the_matching_persons_record_as_json(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(VAULT))
 
-        result = CliRunner().invoke(cli, ["people", "show", "Andrew Thal"])
+        result = CliRunner().invoke(cli, ["people", "show", "Marcus Webb"])
 
         assert result.exit_code == 0
         person = json.loads(result.output)
-        assert person["name"] == "Andrew Thal"
+        assert person["name"] == "Marcus Webb"
         assert person["title"] == "Staff Software Engineer"
         assert person["team"] == "Engineering"
 
     def it_resolves_by_alias_not_just_the_canonical_name(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(VAULT))
 
-        result = CliRunner().invoke(cli, ["people", "show", "athal"])
+        result = CliRunner().invoke(cli, ["people", "show", "mwebb"])
 
         assert result.exit_code == 0
-        assert json.loads(result.output)["name"] == "Andrew Thal"
+        assert json.loads(result.output)["name"] == "Marcus Webb"
 
     def it_exits_non_zero_with_an_error_indication_for_an_unknown_name(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(VAULT))

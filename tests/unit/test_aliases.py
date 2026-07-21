@@ -2,8 +2,8 @@
 
 The vault's 'canonical' value in names.json / projects.json is neither the filename
 nor consistently a display name:
-  - "Kate Silverstein" -> "ksilverstein"   (canonical is the handle; file ksilverstein.md)
-  - "Stephen"          -> "Stephen Golub"   (canonical is display name; file stephen-golub.md)
+  - "Priya Anand" -> "panand"   (canonical is the handle; file panand.md)
+  - "Diego"       -> "Diego Ruiz"   (canonical is display name; file diego-ruiz.md)
 So resolution unifies filename slug + H1 title + frontmatter aliases + BOTH keys and
 values of the JSON tables into one registry. Every lookup returns an explicit state:
 RESOLVED / AMBIGUOUS / UNRESOLVED / SUPPRESSED — never None-as-magic.
@@ -39,63 +39,63 @@ class DescribeEntityRegistry:
     def it_registers_a_person_under_slug_title_and_aliases(self):
         reg = EntityRegistry()
         ref = _person(
-            "ksilverstein", "Kate Silverstein", ["ksilverstein", "Kate Silverstein", "Kate"]
+            "panand", "Priya Anand", ["panand", "Priya Anand", "Priya"]
         )
 
         reg.add(ref)
 
-        assert reg.lookup("ksilverstein") == {ref}
-        assert reg.lookup("Kate Silverstein") == {ref}
-        assert reg.lookup("Kate") == {ref}
+        assert reg.lookup("panand") == {ref}
+        assert reg.lookup("Priya Anand") == {ref}
+        assert reg.lookup("Priya") == {ref}
 
     def it_looks_up_case_insensitively(self):
         reg = EntityRegistry()
-        ref = _person("ksilverstein", "Kate Silverstein", ["Kate"])
+        ref = _person("panand", "Priya Anand", ["Priya"])
         reg.add(ref)
 
-        assert reg.lookup("kate") == {ref}
-        assert reg.lookup("KATE") == {ref}
+        assert reg.lookup("priya") == {ref}
+        assert reg.lookup("PRIYA") == {ref}
 
 
 class DescribeAliasResolverResolved:
     def it_resolves_a_direct_alias_to_one_entity(self):
         reg = EntityRegistry()
-        kate = _person("ksilverstein", "Kate Silverstein", ["Kate", "Kate Silverstein"])
-        reg.add(kate)
+        priya = _person("panand", "Priya Anand", ["Priya", "Priya Anand"])
+        reg.add(priya)
         resolver = AliasResolver(reg, name_table={}, project_table={})
 
-        result = resolver.resolve("Kate", EntityKind.PERSON)
+        result = resolver.resolve("Priya", EntityKind.PERSON)
 
         assert result.status is ResolutionStatus.RESOLVED
-        assert result.entity is kate
+        assert result.entity is priya
 
     def it_resolves_when_display_name_is_canonical_but_file_differs(self):
-        # names.json: "Stephen" -> "Stephen Golub"; file is stephen-golub.md.
+        # names.json: "Diego" -> "Diego Ruiz"; file is diego-ruiz.md.
         reg = EntityRegistry()
-        stephen = _person("stephen-golub", "Stephen Golub", ["Stephen Golub"])
-        reg.add(stephen)
+        diego = _person("diego-ruiz", "Diego Ruiz", ["Diego Ruiz"])
+        reg.add(diego)
         resolver = AliasResolver(
-            reg, name_table={"Stephen": "Stephen Golub"}, project_table={}
+            reg, name_table={"Diego": "Diego Ruiz"}, project_table={}
         )
 
-        result = resolver.resolve("Stephen", EntityKind.PERSON)
+        result = resolver.resolve("Diego", EntityKind.PERSON)
 
         assert result.status is ResolutionStatus.RESOLVED
-        assert result.entity is stephen
+        assert result.entity is diego
 
     def it_resolves_via_table_indirection_when_canonical_is_a_handle(self):
-        # names.json: "Kate Silverstein" -> "ksilverstein"; file is ksilverstein.md.
+        # names.json: "Priya Anand" -> "panand"; file is panand.md.
         reg = EntityRegistry()
-        kate = _person("ksilverstein", "Kate Silverstein", ["ksilverstein"])
-        reg.add(kate)
+        priya = _person("panand", "Priya Anand", ["panand"])
+        reg.add(priya)
         resolver = AliasResolver(
-            reg, name_table={"Kate Silverstein": "ksilverstein"}, project_table={}
+            reg, name_table={"Priya Anand": "panand"}, project_table={}
         )
 
-        result = resolver.resolve("Kate Silverstein", EntityKind.PERSON)
+        result = resolver.resolve("Priya Anand", EntityKind.PERSON)
 
         assert result.status is ResolutionStatus.RESOLVED
-        assert result.entity is kate
+        assert result.entity is priya
 
 
 class DescribeAliasResolverOtherStates:
@@ -108,25 +108,25 @@ class DescribeAliasResolverOtherStates:
         assert result.entity is None
 
     def it_reports_suppressed_when_table_maps_to_empty_string(self):
-        # projects.json: "webservices-infra" -> "" means intentionally not an entity.
+        # projects.json: "atlas-infra" -> "" means intentionally not an entity.
         resolver = AliasResolver(
-            EntityRegistry(), name_table={}, project_table={"webservices-infra": ""}
+            EntityRegistry(), name_table={}, project_table={"atlas-infra": ""}
         )
 
-        result = resolver.resolve("webservices-infra", EntityKind.PROJECT)
+        result = resolver.resolve("atlas-infra", EntityKind.PROJECT)
 
         assert result.status is ResolutionStatus.SUPPRESSED
         assert result.entity is None
 
     def it_reports_ambiguous_when_multiple_entities_share_an_alias(self):
         reg = EntityRegistry()
-        a = _person("andrew-thal", "Andrew Thal", ["Andrew"])
-        b = _person("andre", "Andre", ["Andrew"])  # aliased collision on "Andrew"
+        a = _person("marcus-webb", "Marcus Webb", ["Marcus"])
+        b = _person("marcus-park", "Marcus Park", ["Marcus"])  # aliased collision on "Marcus"
         reg.add(a)
         reg.add(b)
         resolver = AliasResolver(reg, name_table={}, project_table={})
 
-        result = resolver.resolve("Andrew", EntityKind.PERSON)
+        result = resolver.resolve("Marcus", EntityKind.PERSON)
 
         assert result.status is ResolutionStatus.AMBIGUOUS
         assert result.entity is None
@@ -163,29 +163,29 @@ class DescribeAliasResolverProductAndRepoTables:
         assert result.entity is None
 
     def it_resolves_a_github_repo_slug_to_its_canonical_project(self):
-        # github-repos.json: "0din-prompt-toolkit" -> "0din"; file is projects/0din.md.
+        # github-repos.json: "lumen-prompt-toolkit" -> "lumen"; file is projects/lumen.md.
         reg = EntityRegistry()
-        odin = _project("0din", "0din", ["0din"])
-        reg.add(odin)
+        lumen = _project("lumen", "lumen", ["lumen"])
+        reg.add(lumen)
         resolver = AliasResolver(
             reg,
             name_table={},
             project_table={},
-            github_repo_table={"0din-prompt-toolkit": "0din"},
+            github_repo_table={"lumen-prompt-toolkit": "lumen"},
         )
 
-        result = resolver.resolve("0din-prompt-toolkit", EntityKind.PROJECT)
+        result = resolver.resolve("lumen-prompt-toolkit", EntityKind.PROJECT)
 
         assert result.status is ResolutionStatus.RESOLVED
-        assert result.entity is odin
+        assert result.entity is lumen
 
     def it_never_resolves_the_org_metadata_key_as_an_alias(self):
-        # github-repos.json: "_org" -> "0din-ai" is org context, not an alias entry.
+        # github-repos.json: "_org" -> "lumen-labs" is org context, not an alias entry.
         resolver = AliasResolver(
             EntityRegistry(),
             name_table={},
             project_table={},
-            github_repo_table={"_org": "0din-ai", "some-repo": "Odin"},
+            github_repo_table={"_org": "lumen-labs", "some-repo": "Lumen"},
         )
 
         result = resolver.resolve("_org", EntityKind.PROJECT)

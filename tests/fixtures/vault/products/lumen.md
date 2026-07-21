@@ -2,15 +2,15 @@
 type: product
 status: active
 repos:
-  - odin
-  - odin-ml
+  - lumen
+  - lumen-ml
   - scanner
-linear: label:0din.ai
+linear: label:lumen.ai
 aliases:
-  - 0DIN
-  - odin.ai
+  - LUMEN
+  - lumen.ai
 last_updated: 2026-07-01
 ---
-# 0DIN
+# LUMEN
 ## Status
 - Public research platform

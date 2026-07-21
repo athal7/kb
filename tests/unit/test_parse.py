@@ -7,7 +7,7 @@ vault's real-world drift so nothing downstream has to:
   - `slack:` vs `slack_id:` — the SKILL doc says `slack`, real files use `slack_id`;
     both must land in one `slack_id` field.
   - Frontmatter may be entirely absent (journal, decisions) — parsing must not raise.
-  - Frontmatter list fields hold wikilink strings (`"[[Kate]]"`) that must be unwrapped
+  - Frontmatter list fields hold wikilink strings (`"[[Priya]]"`) that must be unwrapped
     to raw targets for later resolution, tolerating stray brackets/whitespace.
   - Journals have no fixed heading schema and no frontmatter; the H1 date is the identity.
 """
@@ -24,18 +24,18 @@ class DescribeParsePerson:
             "email: k@example.com\n"
             "team: Research\n"
             "title: ML Researcher\n"
-            "aliases:\n  - Kate\n"
+            "aliases:\n  - Priya\n"
             "---\n"
-            "# Kate Silverstein\n"
+            "# Priya Anand\n"
         )
 
-        person = parse.parse_person(text, file="people/ksilverstein.md")
+        person = parse.parse_person(text, file="people/panand.md")
 
         assert isinstance(person, Person)
         assert person.email == "k@example.com"
         assert person.team == "Research"
         assert person.title == "ML Researcher"
-        assert person.aliases == ["Kate"]
+        assert person.aliases == ["Priya"]
 
     def it_normalizes_slack_id_drift_from_documented_slack_key(self):
         # SKILL doc says `slack:`; some files use it, others use `slack_id:`. Unify.
@@ -52,13 +52,13 @@ class DescribeParsePerson:
     def it_unwraps_project_wikilinks_from_frontmatter(self):
         text = (
             "---\n"
-            'projects:\n  - "[[Firewall]]"\n  - "[[Odin]]"\n'
+            'projects:\n  - "[[Sentinel]]"\n  - "[[Lumen]]"\n'
             "---\n# Person\n"
         )
 
         person = parse.parse_person(text, file="people/p.md")
 
-        assert [link.raw_text for link in person.project_links] == ["Firewall", "Odin"]
+        assert [link.raw_text for link in person.project_links] == ["Sentinel", "Lumen"]
 
     def it_tolerates_absent_frontmatter_without_raising(self):
         person = parse.parse_person("# Just A Body\nno frontmatter here\n", file="people/p.md")
@@ -83,22 +83,22 @@ class DescribeParseProject:
             "---\n"
             "type: project\n"
             "status: active\n"
-            "github: 0din-ai/odin\n"
+            "github: lumen-labs/lumen\n"
             "linear: https://linear.app/x\n"
-            'product: "[[0DIN]]"\n'
-            'people:\n  - "[[Stephen Golub]]"\n'
-            "---\n# Firewall\n## Status\n- active\n"
+            'product: "[[LUMEN]]"\n'
+            'people:\n  - "[[Diego Ruiz]]"\n'
+            "---\n# Sentinel\n## Status\n- active\n"
         )
 
-        project = parse.parse_project(text, file="projects/firewall.md")
+        project = parse.parse_project(text, file="projects/lumen-sentinel.md")
 
         assert isinstance(project, Project)
         assert project.status == "active"
-        assert project.github == "0din-ai/odin"
+        assert project.github == "lumen-labs/lumen"
         assert project.linear == "https://linear.app/x"
         assert project.product_link is not None
-        assert project.product_link.raw_text == "0DIN"
-        assert [link.raw_text for link in project.people_links] == ["Stephen Golub"]
+        assert project.product_link.raw_text == "LUMEN"
+        assert [link.raw_text for link in project.people_links] == ["Diego Ruiz"]
 
     def it_leaves_product_link_none_when_absent(self):
         project = parse.parse_project(
@@ -115,23 +115,23 @@ class DescribeParseProduct:
             "---\n"
             "type: product\n"
             "status: active\n"
-            "repos:\n  - odin\n  - scanner\n"
-            "linear: label:0din.ai\n"
-            "aliases:\n  - 0DIN\n"
-            "---\n# 0DIN\n"
+            "repos:\n  - lumen\n  - scanner\n"
+            "linear: label:lumen.ai\n"
+            "aliases:\n  - LUMEN\n"
+            "---\n# LUMEN\n"
         )
 
-        product = parse.parse_product(text, file="products/0din.md")
+        product = parse.parse_product(text, file="products/lumen.md")
 
         assert isinstance(product, Product)
-        assert product.repos == ["odin", "scanner"]
-        assert product.linear_label == "label:0din.ai"
-        assert product.aliases == ["0DIN"]
+        assert product.repos == ["lumen", "scanner"]
+        assert product.linear_label == "label:lumen.ai"
+        assert product.aliases == ["LUMEN"]
 
 
 class DescribeParseJournal:
     def it_takes_the_h1_date_as_identity(self):
-        text = "# 2026-07-13\n## Meetings\n- sync with [[Kate]]\n"
+        text = "# 2026-07-13\n## Meetings\n- sync with [[Priya]]\n"
 
         entry = parse.parse_journal(text, file="journal/2026-07-13.md")
 
@@ -145,11 +145,11 @@ class DescribeParseJournal:
         assert entry.date == "2026-07-13"
 
     def it_collects_wikilinks_across_the_body(self):
-        text = "# 2026-07-13\n## Meetings\n- [[Kate]] and [[Andrew]]\n## Slack\n- [[Odin]]\n"
+        text = "# 2026-07-13\n## Meetings\n- [[Priya]] and [[Marcus]]\n## Slack\n- [[Lumen]]\n"
 
         entry = parse.parse_journal(text, file="journal/2026-07-13.md")
 
-        assert [w.raw_text for w in entry.wikilinks] == ["Kate", "Andrew", "Odin"]
+        assert [w.raw_text for w in entry.wikilinks] == ["Priya", "Marcus", "Lumen"]
 
     def it_keeps_variant_headings_as_sections(self):
         text = "# 2026-07-12\n## Slack Context\n- a\n## Diff Stats Summary\n| a | b |\n"

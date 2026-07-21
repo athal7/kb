@@ -206,7 +206,7 @@ class VaultIndex:
         A typo/partial-tolerant fallback for when exact/alias resolution misses:
         every registered name (canonical + H1 title + aliases) is scored with
         difflib's ratio, a substring hit counts as a strong match so `kate`
-        surfaces `Kate Silverstein`, and each entity is kept once at its best
+        surfaces `Priya Anand`, and each entity is kept once at its best
         score. Below `_FUZZY_CUTOFF` is dropped as noise. Ordered best-first.
         """
         folded = _fold(query)

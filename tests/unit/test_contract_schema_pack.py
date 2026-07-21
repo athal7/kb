@@ -51,14 +51,14 @@ class DescribeRelationship:
 class DescribeProfile:
     def it_constructs_from_ref_kind_fields_sections_and_relationships(self):
         profile = Profile(
-            ref="ref:person:ksilverstein",
+            ref="ref:person:panand",
             kind="person",
             fields={"email": "k@example.com", "team": "Research"},
             sections=[Section(heading="Current", body="ML researcher")],
             relationships=[Relationship(name="projects", target="ref:project:firewall")],
         )
 
-        assert profile.ref == "ref:person:ksilverstein"
+        assert profile.ref == "ref:person:panand"
         assert profile.kind == "person"
         assert profile.fields["team"] == "Research"
         assert profile.sections[0].heading == "Current"
@@ -77,9 +77,9 @@ class DescribeProfile:
 
 class DescribeResolutionMapEntry:
     def it_reports_not_suppressed_when_canonical_is_present(self):
-        entry = ResolutionMapEntry(variant="Kate", canonical="Kate Silverstein")
+        entry = ResolutionMapEntry(variant="Priya", canonical="Priya Anand")
 
-        assert entry.canonical == "Kate Silverstein"
+        assert entry.canonical == "Priya Anand"
         assert entry.suppressed is False
 
     def it_derives_suppressed_from_an_empty_canonical(self):

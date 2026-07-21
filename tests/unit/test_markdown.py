@@ -1,7 +1,7 @@
 """Markdown body parsing: heading-agnostic sections + checkbox items.
 
 Journal files use variant `##` headings that differ day to day (`## Odin`,
-`## Heimdall`, `## Meetings`) and often lack any given section. The parser must
+`## Warden`, `## Meetings`) and often lack any given section. The parser must
 never assume a specific heading exists; it splits whatever headings are present
 into an ordered list and lets callers look one up optionally.
 """

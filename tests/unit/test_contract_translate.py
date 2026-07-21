@@ -37,7 +37,7 @@ class _FakeResolver:
 class DescribePersonToProfile:
     def it_gives_the_profile_a_ref_that_is_not_the_persons_file_path(self):
         person = Person(
-            file="people/ksilverstein.md",
+            file="people/panand.md",
             frontmatter={},
             email=None,
             team=None,
@@ -55,21 +55,21 @@ class DescribePersonToProfile:
 
     def it_translates_a_person_into_a_profile_with_matching_field_values(self):
         person = Person(
-            file="people/ksilverstein.md",
+            file="people/panand.md",
             frontmatter={"email": "k@example.com", "team": "Research"},
             email="k@example.com",
             team="Research",
             title="ML Researcher",
-            slack_id="U06E333NPEE",
-            aliases=["Kate", "Kate Silverstein"],
+            slack_id="U06EFAKE02",
+            aliases=["Priya", "Priya Anand"],
             project_links=[
-                Wikilink(raw_text="Firewall", source_file="people/ksilverstein.md", source_line=5)
+                Wikilink(raw_text="Sentinel", source_file="people/panand.md", source_line=5)
             ],
             sections=[CoreSection(heading="Current", level=2, lines=["ML researcher"])],
         )
         resolver = _FakeResolver(
             {
-                ("Firewall", EntityKind.PROJECT): EntityRef(
+                ("Sentinel", EntityKind.PROJECT): EntityRef(
                     canonical="firewall", kind=EntityKind.PROJECT, file="projects/firewall.md"
                 )
             }
@@ -79,12 +79,12 @@ class DescribePersonToProfile:
 
         assert isinstance(profile, Profile)
         assert profile.kind == "person"
-        assert profile.ref == "people/ksilverstein"
+        assert profile.ref == "people/panand"
         assert profile.fields["email"] == "k@example.com"
         assert profile.fields["team"] == "Research"
         assert profile.fields["title"] == "ML Researcher"
-        assert profile.fields["slack_id"] == "U06E333NPEE"
-        assert profile.fields["aliases"] == ["Kate", "Kate Silverstein"]
+        assert profile.fields["slack_id"] == "U06EFAKE02"
+        assert profile.fields["aliases"] == ["Priya", "Priya Anand"]
         assert profile.sections[0].heading == "Current"
         assert profile.sections[0].body == "ML researcher"
         assert [r.model_dump() for r in profile.relationships] == [
@@ -144,10 +144,10 @@ class DescribeProjectToProfile:
             ),
             github="athal7/firewall",
             linear="FIRE",
-            aliases=["Firewall"],
+            aliases=["Sentinel"],
             people_links=[
                 Wikilink(
-                    raw_text="Kate Silverstein",
+                    raw_text="Priya Anand",
                     source_file="projects/firewall.md",
                     source_line=3,
                 )
@@ -159,10 +159,10 @@ class DescribeProjectToProfile:
                 ("Odin", EntityKind.PRODUCT): EntityRef(
                     canonical="odin", kind=EntityKind.PRODUCT, file="products/odin.md"
                 ),
-                ("Kate Silverstein", EntityKind.PERSON): EntityRef(
-                    canonical="ksilverstein",
+                ("Priya Anand", EntityKind.PERSON): EntityRef(
+                    canonical="panand",
                     kind=EntityKind.PERSON,
-                    file="people/ksilverstein.md",
+                    file="people/panand.md",
                 ),
             }
         )
@@ -175,13 +175,13 @@ class DescribeProjectToProfile:
         assert profile.fields["status"] == "active"
         assert profile.fields["github"] == "athal7/firewall"
         assert profile.fields["linear"] == "FIRE"
-        assert profile.fields["aliases"] == ["Firewall"]
+        assert profile.fields["aliases"] == ["Sentinel"]
         assert profile.sections[0].heading == "Status"
         assert profile.sections[0].body == "on track"
         assert {"name": "product", "target": "products/odin"} in [
             r.model_dump() for r in profile.relationships
         ]
-        assert {"name": "people", "target": "people/ksilverstein"} in [
+        assert {"name": "people", "target": "people/panand"} in [
             r.model_dump() for r in profile.relationships
         ]
 
