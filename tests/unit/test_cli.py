@@ -11,6 +11,7 @@ the dashboard actually start.
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -148,3 +149,115 @@ class DescribeCliQueryAndContract:
         data = json.loads(result.output)
         assert data["ok"] is False
         assert "Invalid QueryRequest JSON" in data["error"]["message"]
+
+
+class DescribeJournalAppend:
+    def it_writes_a_bare_body_through_the_engine(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        result = CliRunner().invoke(
+            cli, ["journal", "append", "--date", "2026-07-15", "--content", "Some test content"]
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        journal_file = tmp_path / "journal" / "2026-07-15.md"
+        assert journal_file.read_text(encoding="utf-8") == "# 2026-07-15\n\nSome test content\n"
+
+    def it_writes_content_under_a_named_section(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        result = CliRunner().invoke(
+            cli,
+            [
+                "journal",
+                "append",
+                "--date",
+                "2026-07-15",
+                "--section",
+                "Git Activity",
+                "--content",
+                "- commit 1",
+            ],
+        )
+
+        assert result.exit_code == 0
+        journal_file = tmp_path / "journal" / "2026-07-15.md"
+        assert journal_file.read_text(encoding="utf-8") == (
+            "# 2026-07-15\n\n## Git Activity\n- commit 1\n"
+        )
+
+    def it_appends_to_an_existing_section_rather_than_overwriting_it(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        journal_file = tmp_path / "journal" / "2026-07-15.md"
+        journal_file.write_text("# 2026-07-15\n\n## Git Activity\n- commit 1\n", encoding="utf-8")
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        result = CliRunner().invoke(
+            cli,
+            [
+                "journal",
+                "append",
+                "--date",
+                "2026-07-15",
+                "--section",
+                "Git Activity",
+                "--content",
+                "- commit 2",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert journal_file.read_text(encoding="utf-8") == (
+            "# 2026-07-15\n\n## Git Activity\n- commit 1\n\n- commit 2\n"
+        )
+
+    def it_defaults_the_date_to_today(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        result = CliRunner().invoke(cli, ["journal", "append", "--content", "note to self"])
+
+        assert result.exit_code == 0
+        today = date.today().strftime("%Y-%m-%d")
+        journal_file = tmp_path / "journal" / f"{today}.md"
+        assert journal_file.is_file()
+
+    def it_reads_content_from_stdin_when_content_is_a_dash(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        result = CliRunner().invoke(
+            cli,
+            ["journal", "append", "--date", "2026-07-15", "--content", "-"],
+            input="piped content\n",
+        )
+
+        assert result.exit_code == 0
+        journal_file = tmp_path / "journal" / "2026-07-15.md"
+        assert journal_file.read_text(encoding="utf-8") == "# 2026-07-15\n\npiped content\n"
+
+    def it_exits_non_zero_and_prints_the_error_envelope_for_an_invalid_date(
+        self, monkeypatch, tmp_path
+    ):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        result = CliRunner().invoke(
+            cli, ["journal", "append", "--date", "not-a-date", "--content", "stuff"]
+        )
+
+        assert result.exit_code != 0
+        data = json.loads(result.output)
+        assert data["ok"] is False
+        assert data["error"]["code"] == "validation.invalid_date"
+        assert not (tmp_path / "journal" / "not-a-date.md").is_file()

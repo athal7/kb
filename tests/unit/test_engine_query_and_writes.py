@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from kb.contract.collector import JournalEntry
 from kb.contract.query import QueryFilter, QueryRequest
 from kb.contract.schema_pack import Profile, Relationship, Section
 from kb.core.engine import Engine
@@ -261,3 +262,109 @@ class DescribeEngineWrites:
         # Generated ref should be people/george-washington
         assert new_profile.ref == "people/george-washington"
         assert (temp_vault / "people" / "george-washington.md").is_file()
+
+
+class DescribeEngineJournalWrites:
+    def it_creates_a_new_journal_file_with_h1_and_body(self, temp_vault):
+        engine = Engine(temp_vault)
+
+        resp = engine.write_journal_entry(
+            JournalEntry(date="2026-07-15", body="Some test content")
+        )
+
+        assert resp.ok is True
+        created = temp_vault / "journal" / "2026-07-15.md"
+        assert created.read_text(encoding="utf-8") == "# 2026-07-15\n\nSome test content\n"
+        assert not (temp_vault / ".kb.lock").is_file()
+
+    def it_creates_a_new_journal_under_a_section(self, temp_vault):
+        engine = Engine(temp_vault)
+
+        resp = engine.write_journal_entry(
+            JournalEntry(
+                date="2026-07-15",
+                sections=[Section(heading="Git Activity", body="- commit 1")],
+            )
+        )
+
+        assert resp.ok is True
+        content = (temp_vault / "journal" / "2026-07-15.md").read_text(encoding="utf-8")
+        assert content == "# 2026-07-15\n\n## Git Activity\n- commit 1\n"
+
+    def it_appends_to_an_existing_section(self, temp_vault):
+        engine = Engine(temp_vault)
+        journal_file = temp_vault / "journal" / "2026-07-15.md"
+        journal_file.write_text(
+            "# 2026-07-15\n\n## Git Activity\n- commit 1\n", encoding="utf-8"
+        )
+
+        resp = engine.write_journal_entry(
+            JournalEntry(
+                date="2026-07-15",
+                sections=[Section(heading="Git Activity", body="- commit 2")],
+            )
+        )
+
+        assert resp.ok is True
+        content = journal_file.read_text(encoding="utf-8")
+        assert content == "# 2026-07-15\n\n## Git Activity\n- commit 1\n\n- commit 2\n"
+
+    def it_creates_a_missing_section_in_an_existing_journal(self, temp_vault):
+        engine = Engine(temp_vault)
+        journal_file = temp_vault / "journal" / "2026-07-15.md"
+        journal_file.write_text(
+            "# 2026-07-15\n\n## Slack Context\n- discussion\n", encoding="utf-8"
+        )
+
+        resp = engine.write_journal_entry(
+            JournalEntry(
+                date="2026-07-15",
+                sections=[Section(heading="Git Activity", body="- commit 1")],
+            )
+        )
+
+        assert resp.ok is True
+        content = journal_file.read_text(encoding="utf-8")
+        assert content == (
+            "# 2026-07-15\n\n"
+            "## Slack Context\n- discussion\n\n"
+            "## Git Activity\n- commit 1\n"
+        )
+
+    def it_rejects_an_invalid_date_and_writes_nothing(self, temp_vault):
+        engine = Engine(temp_vault)
+
+        resp = engine.write_journal_entry(
+            JournalEntry(date="invalid-date", body="stuff")
+        )
+
+        assert resp.ok is False
+        assert resp.error.code == "validation.invalid_date"
+        assert resp.error.path == "/date"
+        assert not (temp_vault / "journal" / "invalid-date.md").is_file()
+
+    def it_rejects_a_traversing_date(self, temp_vault):
+        engine = Engine(temp_vault)
+
+        resp = engine.write_journal_entry(
+            JournalEntry(date="../evil", body="stuff")
+        )
+
+        assert resp.ok is False
+        assert not (temp_vault / "evil.md").is_file()
+
+    def it_cleans_up_the_lock_on_non_contention_oserror(self, temp_vault, monkeypatch):
+        engine = Engine(temp_vault)
+
+        def raise_permission_error(*args, **kwargs):
+            raise PermissionError("simulated permission failure")
+
+        monkeypatch.setattr(os, "fdopen", raise_permission_error)
+
+        resp = engine.write_journal_entry(
+            JournalEntry(date="2026-07-15", body="content")
+        )
+
+        assert resp.ok is False
+        assert resp.error.code.startswith("io.")
+        assert not (temp_vault / ".kb.lock").is_file()

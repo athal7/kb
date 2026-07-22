@@ -8,18 +8,27 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
 
+from kb.contract.collector import JournalEntry as CollectorJournalEntry
 from kb.contract.envelope import ContractResponse, ErrorResponse, SuccessResponse
 from kb.contract.errors import ContractError
 from kb.contract.query import QueryHit, QueryRequest, QueryResult
 from kb.contract.schema_pack import Document, Profile, Relationship
-from kb.contract.translate import person_to_profile, product_to_profile, project_to_profile
+from kb.contract.translate import (
+    journal_entry_to_core,
+    person_to_profile,
+    product_to_profile,
+    project_to_profile,
+)
 from kb.core.index import VaultIndex
 from kb.core.models import EntityKind
+from kb.core.markdown import Section as CoreSection
+from kb.core.parse import _strip_h1_date
 
 
 def _fold(name: str) -> str:
@@ -451,6 +460,27 @@ class Engine:
 
     def write_profile(self, profile: Profile) -> ContractResponse[None]:
         """Perform an atomic validated write of a Profile, maintaining all invariants."""
+        return self._with_write_lock(lambda: self._locked_write_profile(profile))
+
+    def write_journal_entry(self, entry: CollectorJournalEntry) -> ContractResponse[None]:
+        """Append a journal entry to its per-date file through the locked atomic path.
+
+        Merges the entry's sections into the existing `journal/<date>.md` (matching
+        level-2 headings case-insensitively, else appending) and commits the whole
+        file atomically, so the same `.kb.lock`, temp-file+rename, and rollback
+        machinery that guards profile writes also guards journal writes.
+        """
+        return self._with_write_lock(lambda: self._locked_write_journal_entry(entry))
+
+    def _with_write_lock(
+        self, fn: Callable[[], ContractResponse[None]]
+    ) -> ContractResponse[None]:
+        """Acquire the vault-wide `.kb.lock`, reload the index, run `fn`, then release.
+
+        Shared by every Engine write op so lock acquisition (with PID-liveness and
+        staleness reclaim), the pre-write reload, and token-matched release live in
+        exactly one place.
+        """
         import os
         import time
         import uuid
@@ -538,7 +568,7 @@ class Engine:
                         message=f"Failed to reload index before write: {reload_err}"
                     )
                 )
-            return self._locked_write_profile(profile)
+            return fn()
         finally:
             if lock_fd:
                 try:
@@ -856,6 +886,143 @@ class Engine:
                     message=f"IO error writing profile files: {e}"
                 )
             )
+
+    def _locked_write_journal_entry(
+        self, entry: CollectorJournalEntry
+    ) -> ContractResponse[None]:
+        import re
+
+        # 1. Validate the date: it is both the filename and the H1 identity heading,
+        #    so a malformed value would corrupt the journal namespace's read path.
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", entry.date):
+            return ErrorResponse(
+                error=ContractError.validation(
+                    path="/date",
+                    message=f"Invalid date '{entry.date}'. Must be YYYY-MM-DD.",
+                    code="validation.invalid_date",
+                )
+            )
+
+        # 2. Path-traversal guard: the resolved file must stay inside journal/.
+        journal_dir = (self.kb_root / "journal").resolve()
+        final_path = (journal_dir / f"{entry.date}.md").resolve()
+        try:
+            final_path.relative_to(journal_dir)
+        except ValueError:
+            return ErrorResponse(
+                error=ContractError.validation(
+                    path="/date",
+                    message="Path traversal detected in journal date.",
+                    code="validation.invalid_date",
+                )
+            )
+
+        # 3. Merge the incoming sections into whatever the file already holds.
+        core_entry = journal_entry_to_core(entry, file_path=f"journal/{entry.date}.md")
+        if final_path.is_file():
+            existing_body = final_path.read_text(encoding="utf-8")
+        else:
+            existing_body = f"# {entry.date}\n"
+        merged = self._merge_journal_sections(existing_body, core_entry.sections)
+        new_text = self._render_journal(entry.date, merged)
+
+        # 4. Commit atomically via the same temp-file + os.replace + rollback path.
+        try:
+            import uuid
+
+            final_path.parent.mkdir(parents=True, exist_ok=True)
+            txn_id = uuid.uuid4().hex
+            temp_path = final_path.with_suffix(f"{final_path.suffix}.{txn_id}.tmp")
+            temp_path.write_text(new_text, encoding="utf-8")
+            try:
+                os.replace(temp_path, final_path)
+            except Exception as commit_err:
+                if temp_path.is_file():
+                    temp_path.unlink()
+                raise commit_err
+
+            self.reload()
+            return SuccessResponse[None](data=None)
+        except Exception as e:
+            return ErrorResponse(
+                error=ContractError.io(
+                    path="",
+                    message=f"IO error writing journal file: {e}"
+                )
+            )
+
+    def _merge_journal_sections(
+        self, existing_body: str, incoming: list[CoreSection]
+    ) -> list[CoreSection]:
+        """Merge incoming sections into the sections parsed from an existing journal.
+
+        A level-2 incoming section whose heading matches (case-insensitively) an
+        existing one appends its lines to that section, separated by a blank line;
+        otherwise it is appended as a new section. A headingless incoming body is
+        appended to the last section (or added on its own if the file is empty).
+        """
+        from kb.core.markdown import split_sections
+
+        sections = split_sections(_strip_h1_date(existing_body))
+
+        def find_match(heading: str) -> int | None:
+            for i, sec in enumerate(sections):
+                if (
+                    sec.heading is not None
+                    and sec.level == 2
+                    and sec.heading.strip().lower() == heading.strip().lower()
+                ):
+                    return i
+            return None
+
+        for inc in incoming:
+            if inc.heading is None:
+                if sections:
+                    last = sections[-1]
+                    merged_lines = self._append_lines(last.lines, inc.lines)
+                    sections[-1] = CoreSection(last.heading, last.level, merged_lines)
+                else:
+                    sections.append(CoreSection(None, 0, list(inc.lines)))
+                continue
+
+            idx = find_match(inc.heading)
+            if idx is not None:
+                existing = sections[idx]
+                merged_lines = self._append_lines(existing.lines, inc.lines)
+                sections[idx] = CoreSection(existing.heading, existing.level, merged_lines)
+            else:
+                sections.append(inc)
+
+        return sections
+
+    @staticmethod
+    def _append_lines(existing: list[str], new: list[str]) -> list[str]:
+        """Concatenate line lists, inserting one blank-line separator between them."""
+        merged = list(existing)
+        if merged:
+            merged.append("")
+        merged.extend(new)
+        return merged
+
+    @staticmethod
+    def _render_journal(date: str, sections: list[CoreSection]) -> str:
+        """Serialize a journal back to markdown: `# <date>` H1 then each section.
+
+        Kept symmetric with `parse_journal`/`split_sections` (H1-date identity
+        heading, `##` section headings, blank line between blocks) so a written
+        file round-trips through the read path unchanged.
+        """
+        blocks: list[str] = [f"# {date}"]
+        for sec in sections:
+            part: list[str] = []
+            if sec.heading is not None:
+                part.append(f"{'#' * sec.level} {sec.heading}")
+            part.extend(sec.lines)
+            blocks.append("\n".join(part))
+        text = "\n\n".join(blocks)
+        if not text.endswith("\n"):
+            text += "\n"
+        return text
 
     def _get_indexed_profile(self, ref: str) -> Profile | None:
         """Helper to get a Profile from the active index."""
