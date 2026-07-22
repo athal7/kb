@@ -213,7 +213,8 @@ def journal_append(
     # Ensure we have the initial H1 section if it's a new file or doesn't have it
     has_h1 = any(s.level == 1 for s in sections)
     if not has_h1:
-        sections.insert(0, Section(heading=date_str, level=1, lines=[]))
+        insert_at = 1 if sections and sections[0].heading is None else 0
+        sections.insert(insert_at, Section(heading=date_str, level=1, lines=[]))
 
     content_lines = [line for line in content.split("\n")]
     if content_lines and content_lines[-1] == "":
@@ -282,7 +283,7 @@ def journal_append(
             "file": f"journal/{date_str}.md",
             "date": date_str,
             "section": section,
-            "bytes_written": len(new_text)
+            "bytes_written": len(new_text.encode("utf-8"))
         },
         "warnings": []
     }

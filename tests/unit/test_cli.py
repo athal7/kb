@@ -188,6 +188,29 @@ class DescribeJournalAppend:
         )
         assert content == expected_content
 
+    def it_inserts_h1_after_preamble_if_no_h1_exists(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        journal_file = tmp_path / "journal" / "2026-07-15.md"
+        # Frontmatter / preamble (no H1)
+        journal_file.write_text("---\nkey: value\n---\n\nSome preamble content\n", encoding="utf-8")
+
+        result = CliRunner().invoke(cli, [
+            "journal", "append",
+            "--date", "2026-07-15",
+            "--content", "Some test content"
+        ])
+
+        assert result.exit_code == 0
+        content = journal_file.read_text(encoding="utf-8")
+        expected_content = (
+            "---\nkey: value\n---\n\nSome preamble content\n\n"
+            "# 2026-07-15\n\nSome test content\n"
+        )
+        assert content == expected_content
+
     def it_supports_reading_content_from_stdin(self, monkeypatch, tmp_path):
         (tmp_path / "people").mkdir()
         (tmp_path / "journal").mkdir()
