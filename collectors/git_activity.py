@@ -20,15 +20,7 @@ from pathlib import Path
 
 
 def get_current_git_user(repo_path: Path) -> str | None:
-    """
-    Resolve the configured Git user name for a repository.
-    
-    Parameters:
-        repo_path (Path): Path to the Git repository.
-    
-    Returns:
-        str | None: The configured user name, or `None` if it is unavailable.
-    """
+    """Resolve the current git user name from git config."""
     try:
         res = subprocess.run(
             ["git", "config", "user.name"],
@@ -44,16 +36,9 @@ def get_current_git_user(repo_path: Path) -> str | None:
 
 
 def get_git_stats(repo_path: Path, date_str: str, author: str | None = None) -> dict | None:
-    """
-    Collect daily Git activity statistics for a repository.
-    
-    Parameters:
-    	repo_path (Path): Repository path to inspect.
-    	date_str (str): Date to use for the activity range, in YYYY-MM-DD format.
-    	author (str | None): Optional author name used to filter commits.
-    
-    Returns:
-    	dict | None: Aggregated project, commit, file-change, insertion, and deletion statistics, or None if the path is not a Git work tree or has no matching commits.
+    """Query git log for commit count, files changed, and line diff stats.
+
+    Filters by the given date and optional author.
     """
     # Ensure repo_path exists and is resolved
     if not repo_path.is_dir():
@@ -139,14 +124,6 @@ def get_git_stats(repo_path: Path, date_str: str, author: str | None = None) -> 
 
 
 def main() -> None:
-    """
-    Collect daily Git activity statistics and append them to the journal.
-    
-    The command supports repository selection, date and author filters, configurable
-    journal sections, and a dry-run mode that prints the generated content and
-    journal command. Exits with status 1 for an invalid date and status 0 when no
-    activity is found.
-    """
     parser = argparse.ArgumentParser(
         description="Derive daily coding stats from git history and log them to kb."
     )

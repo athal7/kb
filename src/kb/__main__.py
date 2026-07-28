@@ -167,17 +167,7 @@ def journal_append(
     section: str | None,
     content: str | None
 ) -> None:
-    """
-    Append content to a dated journal Markdown file, optionally under a matching H2 section.
-    
-    Parameters:
-        date_str (str | None): Journal date in ``YYYY-MM-DD`` format; defaults to today.
-        section (str | None): H2 section under which to append the content.
-        content (str | None): Content to append; reads from standard input when omitted or ``-``.
-    
-    Raises:
-        click.exceptions.Exit: If ``date_str`` does not use the ``YYYY-MM-DD`` format.
-    """
+    """Append content to a daily journal entry, optionally under a specific section."""
     import re
     from datetime import date as datetime_date
 
@@ -301,7 +291,6 @@ def journal_append(
 
 
 def main() -> None:
-    """Run the command-line interface."""
     cli()
 
 
