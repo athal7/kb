@@ -1,4 +1,4 @@
-"""kb's click-based CLI surface: bare invocation, --help, and `people`.
+"""kb's click-based CLI surface: bare invocation, --help, `people`, and `action-items`.
 
 CliRunner drives the click Group directly, so these tests exercise the actual
 argument parsing/dispatch instead of just calling build_app() in isolation
@@ -11,6 +11,7 @@ the dashboard actually start.
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -49,6 +50,7 @@ class DescribeHelp:
 
         assert result.exit_code == 0
         assert "people" in result.output
+        assert "action-items" in result.output
 
 
 class DescribePeopleList:
@@ -101,3 +103,53 @@ class DescribePeopleShow:
 
         assert result.exit_code != 0
         assert "not found" in (result.output + str(result.exception))
+
+
+class DescribeActionItemsCli:
+    def it_lists_action_items(self, monkeypatch, tmp_path):
+        kb_root = tmp_path / "vault"
+        shutil.copytree(VAULT, kb_root)
+        monkeypatch.setenv("KB_ROOT", str(kb_root))
+
+        result = CliRunner().invoke(cli, ["action-items", "list"])
+        assert result.exit_code == 0
+        items = json.loads(result.output)
+        assert isinstance(items, list)
+        assert len(items) == 3
+        assert items[0]["status"] == "todo"
+
+    def it_modifies_status(self, monkeypatch, tmp_path):
+        kb_root = tmp_path / "vault"
+        shutil.copytree(VAULT, kb_root)
+        monkeypatch.setenv("KB_ROOT", str(kb_root))
+
+        # Progress
+        result = CliRunner().invoke(cli, ["action-items", "progress", "3"])
+        assert result.exit_code == 0
+        res = json.loads(result.output)
+        assert res["ok"] is True
+        assert res["status"] == "in_progress"
+
+        # List should show it as in_progress
+        result = CliRunner().invoke(cli, ["action-items", "list"])
+        items = json.loads(result.output)
+        item_3 = [i for i in items if i["line_no"] == 3][0]
+        assert item_3["status"] == "in_progress"
+
+        # Complete
+        result = CliRunner().invoke(cli, ["action-items", "complete", "3"])
+        assert result.exit_code == 0
+
+        # List should no longer show it (since we only show open items, completed ones are excluded)
+        result = CliRunner().invoke(cli, ["action-items", "list"])
+        items = json.loads(result.output)
+        assert not any(i["line_no"] == 3 for i in items)
+
+        # Todo
+        result = CliRunner().invoke(cli, ["action-items", "todo", "3"])
+        assert result.exit_code == 0
+
+        result = CliRunner().invoke(cli, ["action-items", "list"])
+        items = json.loads(result.output)
+        item_3 = [i for i in items if i["line_no"] == 3][0]
+        assert item_3["status"] == "todo"

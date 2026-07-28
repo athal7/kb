@@ -23,7 +23,12 @@ from pathlib import Path
 import click
 
 from kb.config import resolve_kb_root
-from kb.core.actionitems import ActionItem, load_action_items
+from kb.core.actionitems import (
+    ACTION_ITEMS_FILENAME,
+    ActionItem,
+    ActionItemsFile,
+    load_action_items,
+)
 from kb.core.index import VaultIndex
 from kb.core.models import Person
 from kb.platform.eventkit_services import EventKitCalendarService, EventKitRemindersService
@@ -145,6 +150,91 @@ def people_show(ctx: click.Context, name: str) -> None:
         click.echo(json.dumps({"error": "not found", "name": name}), err=True)
         ctx.exit(1)
     click.echo(json.dumps(_person_to_dict(person), indent=2))
+
+
+@cli.group("action-items")
+def action_items_group() -> None:
+    """Manage action items recorded in the vault."""
+
+
+def _get_action_items_file(kb_root: Path) -> tuple[ActionItemsFile | None, str | None]:
+    path = kb_root / ACTION_ITEMS_FILENAME
+    if not path.is_file():
+        return None, f"Action items file {path} not found"
+    try:
+        return ActionItemsFile.parse(path.read_text(encoding="utf-8")), None
+    except Exception as e:
+        return None, f"Error parsing action items file: {e}"
+
+
+def _action_item_to_dict(item: ActionItem) -> dict:
+    status = "todo"
+    if item.checked:
+        status = "completed"
+    elif item.in_progress:
+        status = "in_progress"
+
+    return {
+        "line_no": item.line_no,
+        "source_group": item.source_group,
+        "status": status,
+        "text": item.text,
+    }
+
+
+@action_items_group.command("list")
+def action_items_list() -> None:
+    """Print open or in-progress action items as a JSON array."""
+    kb_root = resolve_kb_root(None, validate=True)
+    file_obj, error = _get_action_items_file(kb_root)
+    if file_obj is None:
+        click.echo(json.dumps({"error": error or "unknown error"}), err=True)
+        click.get_current_context().exit(1)
+
+    # We only return "open" action items (not completed/checked)
+    open_items = [i for i in file_obj.items if not i.checked]
+    click.echo(json.dumps([_action_item_to_dict(i) for i in open_items], indent=2))
+
+
+def _update_action_item_status(line_no: int, status: str) -> None:
+    kb_root = resolve_kb_root(None, validate=True)
+    file_obj, error = _get_action_items_file(kb_root)
+    if file_obj is None:
+        click.echo(json.dumps({"error": error or "unknown error"}), err=True)
+        click.get_current_context().exit(1)
+
+    matching_items = [i for i in file_obj.items if i.line_no == line_no]
+    if not matching_items:
+        click.echo(json.dumps({"error": f"No action item found at line {line_no}"}), err=True)
+        click.get_current_context().exit(1)
+
+    item = matching_items[0]
+    file_obj.set_status(item, status)
+
+    path = kb_root / ACTION_ITEMS_FILENAME
+    path.write_text(file_obj.serialize(), encoding="utf-8")
+    click.echo(json.dumps({"ok": True, "line_no": line_no, "status": status}))
+
+
+@action_items_group.command("complete")
+@click.argument("line_no", type=int)
+def action_items_complete(line_no: int) -> None:
+    """Mark an action item completed."""
+    _update_action_item_status(line_no, "completed")
+
+
+@action_items_group.command("progress")
+@click.argument("line_no", type=int)
+def action_items_progress(line_no: int) -> None:
+    """Mark an action item as in-progress."""
+    _update_action_item_status(line_no, "in_progress")
+
+
+@action_items_group.command("todo")
+@click.argument("line_no", type=int)
+def action_items_todo(line_no: int) -> None:
+    """Mark an action item as todo."""
+    _update_action_item_status(line_no, "todo")
 
 
 def main() -> None:
