@@ -56,7 +56,7 @@ class DescribeBuildApp:
 
         app = build_app()
 
-        assert any("Firewall" in item.text for item in app._action_items)
+        assert any("Sentinel" in item.text for item in app._action_items)
 
     def it_wires_the_resolved_kb_root_onto_the_dashboard_for_refresh(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(VAULT))

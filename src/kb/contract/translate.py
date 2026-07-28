@@ -13,7 +13,7 @@ final stable opaque ref an entity-id scheme would provide (see athal7/kb#3) —
 path.
 
 Relationship targets need the same treatment: a `Wikilink.raw_text` is whatever the
-author typed (`Firewall`, `[[Firewall]]`, a Slack handle via an alias table, ...), not
+author typed (`Sentinel`, `[[Sentinel]]`, a Slack handle via an alias table, ...), not
 a ref — surfacing it verbatim would leak the vault's write-time vocabulary into the
 Contract's read-time shape. `_relationship` instead resolves the link through a
 `WikilinkResolver` (structurally, `VaultIndex.resolve_wikilink`) to the same
@@ -47,7 +47,7 @@ def _translate_section(section: CoreSection) -> Section:
 
 def _ref_from_file(file: str) -> str:
     """Vault-relative file path with its extension stripped, e.g.
-    `projects/firewall.md` -> `projects/firewall`.
+    `projects/lumen-sentinel.md` -> `projects/lumen-sentinel`.
     """
     return PurePosixPath(file).with_suffix("").as_posix()
 
@@ -64,7 +64,7 @@ def _relationship(
 
 
 def _slug(file: str) -> str:
-    """The filename stem, e.g. `people/ksilverstein.md` -> `ksilverstein`."""
+    """The filename stem, e.g. `people/panand.md` -> `panand`."""
     return PurePosixPath(file).stem
 
 

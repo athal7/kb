@@ -24,28 +24,28 @@ class DescribeFuzzyMatches:
     def it_surfaces_a_person_from_a_typo(self):
         index = VaultIndex.build(VAULT)
 
-        matches = index.fuzzy_matches("andrw", (EntityKind.PERSON,))
+        matches = index.fuzzy_matches("marcs", (EntityKind.PERSON,))
 
         assert matches
-        assert _display(matches[0]) == "Andrew Thal"
+        assert _display(matches[0]) == "Marcus Webb"
 
     def it_surfaces_a_person_from_a_partial_name(self):
         index = VaultIndex.build(VAULT)
 
-        matches = index.fuzzy_matches("silverstien", (EntityKind.PERSON,))
+        matches = index.fuzzy_matches("anandd", (EntityKind.PERSON,))
 
         assert matches
-        assert _display(matches[0]) == "Kate Silverstein"
+        assert _display(matches[0]) == "Priya Anand"
 
     def it_matches_against_frontmatter_aliases_not_just_the_display_name(self):
-        # stephen-golub.md has alias "Stephen"; a typo of the alias should still
+        # diego-ruiz.md has alias "Diego"; a typo of the alias should still
         # surface the canonical entity, proving all-names (not just title) matching.
         index = VaultIndex.build(VAULT)
 
-        matches = index.fuzzy_matches("stephn", (EntityKind.PERSON,))
+        matches = index.fuzzy_matches("diegg", (EntityKind.PERSON,))
 
         assert matches
-        assert _display(matches[0]) == "Stephen Golub"
+        assert _display(matches[0]) == "Diego Ruiz"
 
     def it_returns_empty_for_a_query_that_resembles_nothing(self):
         index = VaultIndex.build(VAULT)
@@ -53,28 +53,28 @@ class DescribeFuzzyMatches:
         assert index.fuzzy_matches("zzzzxqptw", (EntityKind.PERSON,)) == []
 
     def it_dedupes_to_one_ref_per_entity(self):
-        # Kate has three names (ksilverstein, Kate Silverstein, Kate); a query
+        # Priya has three names (panand, Priya Anand, Priya); a query
         # that fuzzily hits more than one of them must still yield her once.
         index = VaultIndex.build(VAULT)
 
-        matches = index.fuzzy_matches("kate silverstein", (EntityKind.PERSON,))
+        matches = index.fuzzy_matches("priya anand", (EntityKind.PERSON,))
 
-        kate_hits = [m for m in matches if m.canonical == "ksilverstein"]
-        assert len(kate_hits) == 1
+        priya_hits = [m for m in matches if m.canonical == "panand"]
+        assert len(priya_hits) == 1
 
     def it_ranks_the_closest_name_first(self):
         index = VaultIndex.build(VAULT)
 
-        matches = index.fuzzy_matches("andrew", (EntityKind.PERSON,))
+        matches = index.fuzzy_matches("marcus", (EntityKind.PERSON,))
 
-        assert _display(matches[0]) == "Andrew Thal"
+        assert _display(matches[0]) == "Marcus Webb"
 
     def it_searches_all_requested_kinds(self):
         index = VaultIndex.build(VAULT)
 
         kinds = (EntityKind.PERSON, EntityKind.PROJECT, EntityKind.PRODUCT)
-        project_match = index.fuzzy_matches("firewal", kinds)
-        product_match = index.fuzzy_matches("0di", kinds)
+        project_match = index.fuzzy_matches("sentinl", kinds)
+        product_match = index.fuzzy_matches("lume", kinds)
 
         assert any(m.kind is EntityKind.PROJECT for m in project_match)
         assert any(m.kind is EntityKind.PRODUCT for m in product_match)
@@ -82,7 +82,7 @@ class DescribeFuzzyMatches:
     def it_only_returns_refs_of_the_requested_kinds(self):
         index = VaultIndex.build(VAULT)
 
-        matches = index.fuzzy_matches("firewal", (EntityKind.PERSON,))
+        matches = index.fuzzy_matches("sentinl", (EntityKind.PERSON,))
 
         assert all(m.kind is EntityKind.PERSON for m in matches)
 
@@ -95,25 +95,25 @@ class DescribeFuzzyPeople:
     def it_ranks_the_closest_person_first(self):
         index = VaultIndex.build(VAULT)
 
-        matches = index.fuzzy_people("silverstien")
+        matches = index.fuzzy_people("anandd")
 
         assert matches
-        assert _display(matches[0]) == "Kate Silverstein"
+        assert _display(matches[0]) == "Priya Anand"
 
     def it_matches_against_frontmatter_aliases(self):
-        # "sgolub" is only reachable via an alias, never the display name.
+        # "druiz" is only reachable via an alias, never the display name.
         index = VaultIndex.build(VAULT)
 
-        matches = index.fuzzy_people("stephn")
+        matches = index.fuzzy_people("diegg")
 
         assert matches
-        assert _display(matches[0]) == "Stephen Golub"
+        assert _display(matches[0]) == "Diego Ruiz"
 
     def it_only_returns_people(self):
         index = VaultIndex.build(VAULT)
 
-        # "firewal" is a project; scoped-to-people search must not surface it.
-        matches = index.fuzzy_people("firewal")
+        # "sentinl" is a project; scoped-to-people search must not surface it.
+        matches = index.fuzzy_people("sentinl")
 
         assert all(m.kind is EntityKind.PERSON for m in matches)
 

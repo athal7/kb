@@ -18,10 +18,10 @@ from kb.contract.version import CONTRACT_VERSION
 
 class DescribeSuccessResponse:
     def it_represents_a_successful_response_with_data_and_no_error_field(self):
-        response = SuccessResponse[dict](data={"name": "Kate"})
+        response = SuccessResponse[dict](data={"name": "Priya"})
 
         assert response.ok is True
-        assert response.data == {"name": "Kate"}
+        assert response.data == {"name": "Priya"}
         assert not hasattr(response, "error")
 
     def it_defaults_contract_version_to_the_current_constant(self):
@@ -45,7 +45,7 @@ class DescribeSuccessResponse:
         error = ContractError(code="io.transient", message="x", path="/x", retryable=True)
 
         with pytest.raises(ValidationError):
-            SuccessResponse[dict](data={"name": "Kate"}, error=error)
+            SuccessResponse[dict](data={"name": "Priya"}, error=error)
 
 
 class DescribeErrorResponse:
@@ -74,7 +74,7 @@ class DescribeErrorResponse:
         error = ContractError(code="io.transient", message="x", path="/x", retryable=True)
 
         with pytest.raises(ValidationError):
-            ErrorResponse(error=error, data={"name": "Kate"})
+            ErrorResponse(error=error, data={"name": "Priya"})
 
 
 class DescribeContractResponseSchema:

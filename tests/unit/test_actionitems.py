@@ -12,15 +12,15 @@ from kb.core.actionitems import ActionItemsFile, load_action_items
 SAMPLE = """# Open Action Items
 
 ## From 2026-07-07 (Slack)
-- [ ] **Stephen**: Attend All-MoCo meeting
+- [ ] **Diego**: Attend All-MoCo meeting
 - [ ] **Team**: sync name updated
 
-## From 2026-07-02 (0din Check-in)
-- [x] **Stephen**: Complete Vertex AI deployment — done 2026-07-07
-- [ ] **Kate**: Follow up with [[Firefox]] team — see [PR](https://x/1) 0DIN-1732
+## From 2026-07-02 (Lumen Check-in)
+- [x] **Diego**: Complete Meridian AI deployment — done 2026-07-07
+- [ ] **Priya**: Follow up with [[Firefox]] team — see [PR](https://x/1) LUMEN-1732
 
 ## Ongoing / Unresolved
-- [ ] Venezuela logistics — fluid situation
+- [ ] Storage migration — vendor timeline shifting
 """
 
 
@@ -31,8 +31,8 @@ class DescribeParse:
         assert [i.source_group for i in f.items] == [
             "From 2026-07-07 (Slack)",
             "From 2026-07-07 (Slack)",
-            "From 2026-07-02 (0din Check-in)",
-            "From 2026-07-02 (0din Check-in)",
+            "From 2026-07-02 (Lumen Check-in)",
+            "From 2026-07-02 (Lumen Check-in)",
             "Ongoing / Unresolved",
         ]
 
@@ -45,29 +45,29 @@ class DescribeParse:
     def it_extracts_bold_person_prefix_when_present(self):
         f = ActionItemsFile.parse(SAMPLE)
 
-        assert f.items[0].person_prefix == "Stephen"
-        assert f.items[4].person_prefix is None  # Venezuela item has no bold prefix
+        assert f.items[0].person_prefix == "Diego"
+        assert f.items[4].person_prefix is None  # Storage migration item has no bold prefix
 
     def it_extracts_wikilinks_external_links_and_linear_refs(self):
         f = ActionItemsFile.parse(SAMPLE)
-        kate = f.items[3]
+        priya = f.items[3]
 
-        assert kate.wikilinks == ["Firefox"]
-        assert kate.external_links == ["https://x/1"]
-        assert kate.linear_refs == ["0DIN-1732"]
+        assert priya.wikilinks == ["Firefox"]
+        assert priya.external_links == ["https://x/1"]
+        assert priya.linear_refs == ["LUMEN-1732"]
 
     def it_does_not_mistake_pr_numbers_or_urls_for_linear_refs(self):
-        # Real vault landmine: "PR #986" and "[#986](url)" must not become Linear refs.
+        # Real vault landmine: "PR #742" and "[#742](url)" must not become Linear refs.
         text = (
             "## From X\n"
-            "- [ ] Reply to PR #986 (0DIN-1768) — see "
-            "[#986](https://github.com/0din-ai/odin/pull/986)\n"
+            "- [ ] Reply to PR #742 (LUMEN-1768) — see "
+            "[#742](https://github.com/lumen-labs/lumen/pull/742)\n"
         )
 
         item = ActionItemsFile.parse(text).items[0]
 
-        assert item.linear_refs == ["0DIN-1768"]
-        assert item.external_links == ["https://github.com/0din-ai/odin/pull/986"]
+        assert item.linear_refs == ["LUMEN-1768"]
+        assert item.external_links == ["https://github.com/lumen-labs/lumen/pull/742"]
 
     def it_records_line_numbers_for_each_item(self):
         f = ActionItemsFile.parse(SAMPLE)
@@ -98,7 +98,7 @@ class DescribeRoundTrip:
 class DescribeToggle:
     def it_checks_an_unchecked_item_changing_only_that_line(self):
         f = ActionItemsFile.parse(SAMPLE)
-        target = f.items[0]  # "- [ ] **Stephen**: Attend All-MoCo meeting"
+        target = f.items[0]  # "- [ ] **Diego**: Attend All-MoCo meeting"
 
         f.toggle(target)
         result = f.serialize()
@@ -107,7 +107,7 @@ class DescribeToggle:
         after = result.split("\n")
         changed = [i for i in range(len(before)) if before[i] != after[i]]
         assert changed == [target.line_no]
-        assert after[target.line_no] == "- [x] **Stephen**: Attend All-MoCo meeting"
+        assert after[target.line_no] == "- [x] **Diego**: Attend All-MoCo meeting"
 
     def it_unchecks_a_checked_item(self):
         f = ActionItemsFile.parse(SAMPLE)
