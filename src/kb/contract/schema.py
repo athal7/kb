@@ -18,16 +18,11 @@ from kb.contract.schema_pack import Profile
 
 
 def contract_schema() -> dict[str, Any]:
-    """Return the JSON Schema for the Contract's response envelope and Profile shape.
-
-    `ContractResponse` is parametrized with `dict` here only to get one concrete
-    schema out of the generic; real per-op response types (e.g.
-    `ContractResponse[Profile]`) would each generate their own schema the same way.
-
-    `ContractResponse[T]` is a type alias over a discriminated union, not a
-    `BaseModel` subclass, so it has no `.model_json_schema()` of its own —
-    `TypeAdapter` is pydantic's entry point for getting a schema (or validation) out
-    of a bare type rather than a model class.
+    """
+    Generate JSON Schema definitions for the Contract response envelope and `Profile` shape.
+    
+    Returns:
+        dict[str, Any]: A mapping containing the `ContractResponse` and `Profile` JSON Schemas.
     """
 
     return {
