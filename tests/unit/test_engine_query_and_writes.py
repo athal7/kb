@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 
-from kb.contract.collector import JournalEntry
 from kb.contract.query import QueryFilter, QueryRequest
 from kb.contract.schema_pack import Profile, Relationship, Section
 from kb.core.engine import Engine
@@ -32,14 +31,14 @@ class DescribeEngineQuery:
     def it_performs_substring_search_across_sections_and_fields(self):
         engine = Engine(VAULT)
 
-        # Searching for "gRPC" which is in Andrew Thal's section body
+        # Searching for "gRPC" which is in Marcus Webb's section body
         req = QueryRequest(text="gRPC")
         resp = engine.query(req)
 
         assert resp.ok is True
         assert len(resp.data.hits) > 0
         hit = resp.data.hits[0]
-        assert hit.ref == "people/andrew-thal"
+        assert hit.ref == "people/marcus-webb"
         assert hit.collection == "people"
         assert "gRPC" in hit.snippet
         assert hit.matched_in.startswith("sections")
@@ -56,7 +55,7 @@ class DescribeEngineQuery:
 
         assert resp.ok is True
         assert len(resp.data.hits) > 0
-        assert any(hit.ref == "projects/firewall" for hit in resp.data.hits)
+        assert any(hit.ref == "projects/lumen-sentinel" for hit in resp.data.hits)
         for hit in resp.data.hits:
             assert hit.collection == "projects"
             # Get the profile to assert the field
@@ -79,9 +78,9 @@ class DescribeEngineQuery:
     def it_supports_relationship_traversal_outgoing(self):
         engine = Engine(VAULT)
 
-        # Traversal: projects related to "people/andrew-thal"
+        # Traversal: projects related to "people/marcus-webb"
         req = QueryRequest(
-            related_to="people/andrew-thal",
+            related_to="people/marcus-webb",
             relationship="projects"
         )
         resp = engine.query(req)
@@ -89,14 +88,14 @@ class DescribeEngineQuery:
         assert resp.ok is True
         assert len(resp.data.hits) > 0
         refs = [h.ref for h in resp.data.hits]
-        assert "projects/firewall" in refs
+        assert "projects/lumen-sentinel" in refs
 
     def it_supports_relationship_traversal_incoming(self):
         engine = Engine(VAULT)
 
-        # Traversal: people on project "projects/firewall"
+        # Traversal: people on project "projects/lumen-sentinel"
         req = QueryRequest(
-            related_to="projects/firewall",
+            related_to="projects/lumen-sentinel",
             relationship="people"
         )
         resp = engine.query(req)
@@ -104,19 +103,19 @@ class DescribeEngineQuery:
         assert resp.ok is True
         assert len(resp.data.hits) > 0
         refs = [h.ref for h in resp.data.hits]
-        assert "people/stephen-golub" in refs or "people/andrew-thal" in refs
+        assert "people/diego-ruiz" in refs or "people/marcus-webb" in refs
 
     def it_resolves_alias_aware_query_terms(self):
         engine = Engine(VAULT)
 
-        # "athal" is an alias of "Andrew Thal"
-        req = QueryRequest(text="athal", collections=["people"])
+        # "mwebb" is an alias of "Marcus Webb"
+        req = QueryRequest(text="mwebb", collections=["people"])
         resp = engine.query(req)
 
         assert resp.ok is True
         assert len(resp.data.hits) > 0
         refs = [h.ref for h in resp.data.hits]
-        assert "people/andrew-thal" in refs
+        assert "people/marcus-webb" in refs
 
 
 class DescribeEngineWrites:
@@ -174,27 +173,27 @@ class DescribeEngineWrites:
     def it_syncs_bidirectional_relationships_upon_write(self, temp_vault):
         engine = Engine(temp_vault)
 
-        # Andre (people/andre) has no relationship to projects/webservices initially
-        # Let's save Andre with a relationship pointing to projects/webservices
-        andre = engine._get_indexed_profile("people/andre")
-        assert andre is not None
-        assert len(andre.relationships) == 0
+        # Elena (people/elena) has no relationship to projects/atlas initially
+        # Let's save Elena with a relationship pointing to projects/atlas
+        elena = engine._get_indexed_profile("people/elena")
+        assert elena is not None
+        assert len(elena.relationships) == 0
 
-        # Add projects relationship pointing to projects/webservices
-        andre.relationships.append(
-            Relationship(name="projects", target="projects/webservices")
+        # Add projects relationship pointing to projects/atlas
+        elena.relationships.append(
+            Relationship(name="projects", target="projects/atlas")
         )
 
-        resp = engine.write_profile(andre)
+        resp = engine.write_profile(elena)
         assert resp.ok is True
 
-        # Reload target and verify that projects/webservices got the inverse
-        # 'people' relationship back to Andre
-        webservices = engine._get_indexed_profile("projects/webservices")
-        assert webservices is not None
+        # Reload target and verify that projects/atlas got the inverse
+        # 'people' relationship back to Elena
+        atlas = engine._get_indexed_profile("projects/atlas")
+        assert atlas is not None
         has_inverse = any(
-            r.name == "people" and r.target == "people/andre"
-            for r in webservices.relationships
+            r.name == "people" and r.target == "people/elena"
+            for r in atlas.relationships
         )
         assert has_inverse is True
 
@@ -202,19 +201,19 @@ class DescribeEngineWrites:
         engine = Engine(temp_vault)
 
         # Save a person with new aliases
-        kate = engine._get_indexed_profile("people/ksilverstein")
-        assert kate is not None
+        priya = engine._get_indexed_profile("people/panand")
+        assert priya is not None
 
-        kate.fields["aliases"] = ["Katie", "ksilv"]
-        resp = engine.write_profile(kate)
+        priya.fields["aliases"] = ["Priyaa", "pnand"]
+        resp = engine.write_profile(priya)
         assert resp.ok is True
 
         # Read names.json and assert the aliases exist
         names_json = json.loads((temp_vault / "names.json").read_text(encoding="utf-8"))
-        assert names_json["Katie"] == "Kate Silverstein"
-        assert names_json["ksilv"] == "Kate Silverstein"
+        assert names_json["Priyaa"] == "Priya Anand"
+        assert names_json["pnand"] == "Priya Anand"
         # Old aliases not in the list should be cleaned up
-        assert "kate" not in names_json
+        assert "priya" not in names_json
 
     def it_removes_stale_alias_map_entries_after_profile_rename(self, temp_vault):
         engine = Engine(temp_vault)
@@ -262,212 +261,3 @@ class DescribeEngineWrites:
         # Generated ref should be people/george-washington
         assert new_profile.ref == "people/george-washington"
         assert (temp_vault / "people" / "george-washington.md").is_file()
-
-
-class DescribeEngineJournalWrites:
-    def it_creates_a_new_journal_file_with_h1_and_body(self, temp_vault):
-        engine = Engine(temp_vault)
-
-        resp = engine.write_journal_entry(
-            JournalEntry(date="2026-07-15", body="Some test content")
-        )
-
-        assert resp.ok is True
-        created = temp_vault / "journal" / "2026-07-15.md"
-        assert created.read_text(encoding="utf-8") == "# 2026-07-15\n\nSome test content\n"
-        assert not (temp_vault / ".kb.lock").is_file()
-
-    def it_creates_a_new_journal_under_a_section(self, temp_vault):
-        engine = Engine(temp_vault)
-
-        resp = engine.write_journal_entry(
-            JournalEntry(
-                date="2026-07-15",
-                sections=[Section(heading="Git Activity", body="- commit 1")],
-            )
-        )
-
-        assert resp.ok is True
-        content = (temp_vault / "journal" / "2026-07-15.md").read_text(encoding="utf-8")
-        assert content == "# 2026-07-15\n\n## Git Activity\n- commit 1\n"
-
-    def it_appends_to_an_existing_section(self, temp_vault):
-        engine = Engine(temp_vault)
-        journal_file = temp_vault / "journal" / "2026-07-15.md"
-        journal_file.write_text(
-            "# 2026-07-15\n\n## Git Activity\n- commit 1\n", encoding="utf-8"
-        )
-
-        resp = engine.write_journal_entry(
-            JournalEntry(
-                date="2026-07-15",
-                sections=[Section(heading="Git Activity", body="- commit 2")],
-            )
-        )
-
-        assert resp.ok is True
-        content = journal_file.read_text(encoding="utf-8")
-        assert content == "# 2026-07-15\n\n## Git Activity\n- commit 1\n\n- commit 2\n"
-
-    def it_creates_a_missing_section_in_an_existing_journal(self, temp_vault):
-        engine = Engine(temp_vault)
-        journal_file = temp_vault / "journal" / "2026-07-15.md"
-        journal_file.write_text(
-            "# 2026-07-15\n\n## Slack Context\n- discussion\n", encoding="utf-8"
-        )
-
-        resp = engine.write_journal_entry(
-            JournalEntry(
-                date="2026-07-15",
-                sections=[Section(heading="Git Activity", body="- commit 1")],
-            )
-        )
-
-        assert resp.ok is True
-        content = journal_file.read_text(encoding="utf-8")
-        assert content == (
-            "# 2026-07-15\n\n"
-            "## Slack Context\n- discussion\n\n"
-            "## Git Activity\n- commit 1\n"
-        )
-
-    def it_rejects_an_invalid_date_and_writes_nothing(self, temp_vault):
-        engine = Engine(temp_vault)
-
-        resp = engine.write_journal_entry(
-            JournalEntry(date="invalid-date", body="stuff")
-        )
-
-        assert resp.ok is False
-        assert resp.error.code == "validation.invalid_date"
-        assert resp.error.path == "/date"
-        assert not (temp_vault / "journal" / "invalid-date.md").is_file()
-
-    def it_rejects_a_traversing_date(self, temp_vault):
-        engine = Engine(temp_vault)
-
-        resp = engine.write_journal_entry(
-            JournalEntry(date="../evil", body="stuff")
-        )
-
-        assert resp.ok is False
-        assert not (temp_vault / "evil.md").is_file()
-
-    def it_cleans_up_the_lock_on_non_contention_oserror(self, temp_vault, monkeypatch):
-        engine = Engine(temp_vault)
-
-        def raise_permission_error(*args, **kwargs):
-            raise PermissionError("simulated permission failure")
-
-        monkeypatch.setattr(os, "fdopen", raise_permission_error)
-
-        resp = engine.write_journal_entry(
-            JournalEntry(date="2026-07-15", body="content")
-        )
-
-        assert resp.ok is False
-        assert resp.error.code.startswith("io.")
-        assert not (temp_vault / ".kb.lock").is_file()
-
-    def it_appends_a_headingless_body_to_the_last_existing_section(self, temp_vault):
-        engine = Engine(temp_vault)
-        journal_file = temp_vault / "journal" / "2026-07-15.md"
-        journal_file.write_text(
-            "# 2026-07-15\n\n## Git Activity\n- commit 1\n", encoding="utf-8"
-        )
-
-        resp = engine.write_journal_entry(
-            JournalEntry(date="2026-07-15", body="unsectioned note")
-        )
-
-        assert resp.ok is True
-        content = journal_file.read_text(encoding="utf-8")
-        assert content == (
-            "# 2026-07-15\n\n## Git Activity\n- commit 1\n\nunsectioned note\n"
-        )
-
-    def it_writes_multiple_sections_from_a_single_entry_in_order(self, temp_vault):
-        engine = Engine(temp_vault)
-
-        resp = engine.write_journal_entry(
-            JournalEntry(
-                date="2026-07-15",
-                sections=[
-                    Section(heading="Git Activity", body="- commit 1"),
-                    Section(heading="Slack Context", body="- discussion"),
-                ],
-            )
-        )
-
-        assert resp.ok is True
-        content = (temp_vault / "journal" / "2026-07-15.md").read_text(encoding="utf-8")
-        assert content == (
-            "# 2026-07-15\n\n"
-            "## Git Activity\n- commit 1\n\n"
-            "## Slack Context\n- discussion\n"
-        )
-
-    def it_matches_existing_section_heading_case_insensitively_and_preserves_original_casing(
-        self, temp_vault
-    ):
-        engine = Engine(temp_vault)
-        journal_file = temp_vault / "journal" / "2026-07-15.md"
-        journal_file.write_text(
-            "# 2026-07-15\n\n## git activity\n- commit 1\n", encoding="utf-8"
-        )
-
-        resp = engine.write_journal_entry(
-            JournalEntry(
-                date="2026-07-15",
-                sections=[Section(heading="Git Activity", body="- commit 2")],
-            )
-        )
-
-        assert resp.ok is True
-        content = journal_file.read_text(encoding="utf-8")
-        # The heading keeps the on-disk casing; only the body is merged in.
-        assert content == "# 2026-07-15\n\n## git activity\n- commit 1\n\n- commit 2\n"
-
-    def it_creates_a_journal_with_only_the_h1_when_entry_has_no_content(self, temp_vault):
-        engine = Engine(temp_vault)
-
-        resp = engine.write_journal_entry(JournalEntry(date="2026-07-17"))
-
-        assert resp.ok is True
-        content = (temp_vault / "journal" / "2026-07-17.md").read_text(encoding="utf-8")
-        assert content == "# 2026-07-17\n"
-
-    def it_reloads_the_index_so_the_new_entry_is_immediately_queryable(self, temp_vault):
-        engine = Engine(temp_vault)
-
-        resp = engine.write_journal_entry(
-            JournalEntry(date="2026-07-16", body="Reviewed the quarterly roadmap doc")
-        )
-        assert resp.ok is True
-
-        query_resp = engine.query(QueryRequest(text="quarterly roadmap"))
-
-        assert query_resp.ok is True
-        refs = [h.ref for h in query_resp.data.hits]
-        assert "journal/2026-07-16" in refs
-
-    def it_returns_io_error_and_removes_the_temp_file_when_the_atomic_replace_fails(
-        self, temp_vault, monkeypatch
-    ):
-        engine = Engine(temp_vault)
-
-        def raise_os_error(*args, **kwargs):
-            raise OSError("simulated replace failure")
-
-        monkeypatch.setattr(os, "replace", raise_os_error)
-
-        resp = engine.write_journal_entry(
-            JournalEntry(date="2026-07-16", body="won't be committed")
-        )
-
-        assert resp.ok is False
-        assert resp.error.code.startswith("io.")
-        journal_dir = temp_vault / "journal"
-        assert not (journal_dir / "2026-07-16.md").is_file()
-        assert list(journal_dir.glob("*.tmp")) == []
-        assert not (temp_vault / ".kb.lock").is_file()

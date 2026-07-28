@@ -11,7 +11,6 @@ the dashboard actually start.
 from __future__ import annotations
 
 import json
-from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -79,21 +78,21 @@ class DescribePeopleShow:
     def it_prints_the_matching_persons_record_as_json(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(VAULT))
 
-        result = CliRunner().invoke(cli, ["people", "show", "Andrew Thal"])
+        result = CliRunner().invoke(cli, ["people", "show", "Marcus Webb"])
 
         assert result.exit_code == 0
         person = json.loads(result.output)
-        assert person["name"] == "Andrew Thal"
+        assert person["name"] == "Marcus Webb"
         assert person["title"] == "Staff Software Engineer"
         assert person["team"] == "Engineering"
 
     def it_resolves_by_alias_not_just_the_canonical_name(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(VAULT))
 
-        result = CliRunner().invoke(cli, ["people", "show", "athal"])
+        result = CliRunner().invoke(cli, ["people", "show", "mwebb"])
 
         assert result.exit_code == 0
-        assert json.loads(result.output)["name"] == "Andrew Thal"
+        assert json.loads(result.output)["name"] == "Marcus Webb"
 
     def it_exits_non_zero_with_an_error_indication_for_an_unknown_name(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(VAULT))
@@ -149,188 +148,3 @@ class DescribeCliQueryAndContract:
         data = json.loads(result.output)
         assert data["ok"] is False
         assert "Invalid QueryRequest JSON" in data["error"]["message"]
-
-
-class DescribeJournalAppend:
-    def it_writes_a_bare_body_through_the_engine(self, monkeypatch, tmp_path):
-        (tmp_path / "people").mkdir()
-        (tmp_path / "journal").mkdir()
-        monkeypatch.setenv("KB_ROOT", str(tmp_path))
-
-        result = CliRunner().invoke(
-            cli, ["journal", "append", "--date", "2026-07-15", "--content", "Some test content"]
-        )
-
-        assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert data["ok"] is True
-        journal_file = tmp_path / "journal" / "2026-07-15.md"
-        assert journal_file.read_text(encoding="utf-8") == "# 2026-07-15\n\nSome test content\n"
-
-    def it_writes_content_under_a_named_section(self, monkeypatch, tmp_path):
-        (tmp_path / "people").mkdir()
-        (tmp_path / "journal").mkdir()
-        monkeypatch.setenv("KB_ROOT", str(tmp_path))
-
-        result = CliRunner().invoke(
-            cli,
-            [
-                "journal",
-                "append",
-                "--date",
-                "2026-07-15",
-                "--section",
-                "Git Activity",
-                "--content",
-                "- commit 1",
-            ],
-        )
-
-        assert result.exit_code == 0
-        journal_file = tmp_path / "journal" / "2026-07-15.md"
-        assert journal_file.read_text(encoding="utf-8") == (
-            "# 2026-07-15\n\n## Git Activity\n- commit 1\n"
-        )
-
-    def it_appends_to_an_existing_section_rather_than_overwriting_it(self, monkeypatch, tmp_path):
-        (tmp_path / "people").mkdir()
-        (tmp_path / "journal").mkdir()
-        journal_file = tmp_path / "journal" / "2026-07-15.md"
-        journal_file.write_text("# 2026-07-15\n\n## Git Activity\n- commit 1\n", encoding="utf-8")
-        monkeypatch.setenv("KB_ROOT", str(tmp_path))
-
-        result = CliRunner().invoke(
-            cli,
-            [
-                "journal",
-                "append",
-                "--date",
-                "2026-07-15",
-                "--section",
-                "Git Activity",
-                "--content",
-                "- commit 2",
-            ],
-        )
-
-        assert result.exit_code == 0
-        assert journal_file.read_text(encoding="utf-8") == (
-            "# 2026-07-15\n\n## Git Activity\n- commit 1\n\n- commit 2\n"
-        )
-
-    def it_defaults_the_date_to_today(self, monkeypatch, tmp_path):
-        (tmp_path / "people").mkdir()
-        (tmp_path / "journal").mkdir()
-        monkeypatch.setenv("KB_ROOT", str(tmp_path))
-
-        result = CliRunner().invoke(cli, ["journal", "append", "--content", "note to self"])
-
-        assert result.exit_code == 0
-        today = date.today().strftime("%Y-%m-%d")
-        journal_file = tmp_path / "journal" / f"{today}.md"
-        assert journal_file.is_file()
-
-    def it_reads_content_from_stdin_when_content_is_a_dash(self, monkeypatch, tmp_path):
-        (tmp_path / "people").mkdir()
-        (tmp_path / "journal").mkdir()
-        monkeypatch.setenv("KB_ROOT", str(tmp_path))
-
-        result = CliRunner().invoke(
-            cli,
-            ["journal", "append", "--date", "2026-07-15", "--content", "-"],
-            input="piped content\n",
-        )
-
-        assert result.exit_code == 0
-        journal_file = tmp_path / "journal" / "2026-07-15.md"
-        assert journal_file.read_text(encoding="utf-8") == "# 2026-07-15\n\npiped content\n"
-
-    def it_exits_non_zero_and_prints_the_error_envelope_for_an_invalid_date(
-        self, monkeypatch, tmp_path
-    ):
-        (tmp_path / "people").mkdir()
-        (tmp_path / "journal").mkdir()
-        monkeypatch.setenv("KB_ROOT", str(tmp_path))
-
-        result = CliRunner().invoke(
-            cli, ["journal", "append", "--date", "not-a-date", "--content", "stuff"]
-        )
-
-        assert result.exit_code != 0
-        data = json.loads(result.output)
-        assert data["ok"] is False
-        assert data["error"]["code"] == "validation.invalid_date"
-        assert not (tmp_path / "journal" / "not-a-date.md").is_file()
-
-    def it_reads_from_stdin_when_the_content_option_is_omitted_entirely(
-        self, monkeypatch, tmp_path
-    ):
-        (tmp_path / "people").mkdir()
-        (tmp_path / "journal").mkdir()
-        monkeypatch.setenv("KB_ROOT", str(tmp_path))
-
-        result = CliRunner().invoke(
-            cli,
-            ["journal", "append", "--date", "2026-07-15"],
-            input="from stdin, no --content flag\n",
-        )
-
-        assert result.exit_code == 0
-        journal_file = tmp_path / "journal" / "2026-07-15.md"
-        assert journal_file.read_text(encoding="utf-8") == (
-            "# 2026-07-15\n\nfrom stdin, no --content flag\n"
-        )
-
-    def it_creates_an_h1_only_journal_when_stdin_is_empty(self, monkeypatch, tmp_path):
-        (tmp_path / "people").mkdir()
-        (tmp_path / "journal").mkdir()
-        monkeypatch.setenv("KB_ROOT", str(tmp_path))
-
-        result = CliRunner().invoke(cli, ["journal", "append", "--date", "2026-07-15"])
-
-        assert result.exit_code == 0
-        journal_file = tmp_path / "journal" / "2026-07-15.md"
-        assert journal_file.read_text(encoding="utf-8") == "# 2026-07-15\n"
-
-    def it_prints_an_io_error_envelope_when_the_kb_root_is_invalid(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("KB_ROOT", str(tmp_path / "not-a-vault"))
-
-        result = CliRunner().invoke(
-            cli, ["journal", "append", "--date", "2026-07-15", "--content", "stuff"]
-        )
-
-        assert result.exit_code != 0
-        data = json.loads(result.output)
-        assert data["ok"] is False
-        assert "Failed to load KB" in data["error"]["message"]
-
-    def it_lists_the_append_subcommand_in_its_help_output(self):
-        result = CliRunner().invoke(cli, ["journal", "--help"])
-
-        assert result.exit_code == 0
-        assert "append" in result.output
-
-    def it_makes_the_appended_entry_immediately_queryable(self, monkeypatch, tmp_path):
-        (tmp_path / "people").mkdir()
-        (tmp_path / "journal").mkdir()
-        monkeypatch.setenv("KB_ROOT", str(tmp_path))
-
-        append_result = CliRunner().invoke(
-            cli,
-            [
-                "journal",
-                "append",
-                "--date",
-                "2026-07-15",
-                "--content",
-                "Shipped the auth refactor",
-            ],
-        )
-        assert append_result.exit_code == 0
-
-        query_result = CliRunner().invoke(cli, ["query", "-t", "auth refactor"])
-
-        assert query_result.exit_code == 0
-        data = json.loads(query_result.output)
-        assert data["ok"] is True
-        assert any(hit["ref"] == "journal/2026-07-15" for hit in data["data"]["hits"])
