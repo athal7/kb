@@ -69,6 +69,16 @@ def _slug(file: str) -> str:
 
 
 def person_to_profile(person: Person, resolver: WikilinkResolver) -> Profile:
+    """
+    Create a Contract profile from a person record.
+    
+    Parameters:
+    	person (Person): The person record to translate.
+    	resolver (WikilinkResolver): Resolves linked project references.
+    
+    Returns:
+    	Profile: A profile containing the person's fields, sections, and project relationships.
+    """
     relationships = [
         _relationship("projects", link, EntityKind.PROJECT, resolver)
         for link in person.project_links
@@ -90,6 +100,16 @@ def person_to_profile(person: Person, resolver: WikilinkResolver) -> Profile:
 
 
 def project_to_profile(project: Project, resolver: WikilinkResolver) -> Profile:
+    """
+    Build a Contract Profile from a project and its linked entities.
+    
+    Parameters:
+        project (Project): Project data to translate.
+        resolver (WikilinkResolver): Resolver used to map linked entities to canonical references.
+    
+    Returns:
+        Profile: Contract representation of the project.
+    """
     relationships = []
     if project.product_link is not None:
         relationships.append(
