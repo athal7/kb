@@ -42,6 +42,7 @@ class InvalidConfigError(Exception):
 class DashboardConfig:
     enabled_plugins: list[str]
     layout_rows: list[list[str]]
+    trigger_command: str | None = None
 
 
 def default_config_path() -> Path:
@@ -72,6 +73,7 @@ def load_config(path: Path) -> DashboardConfig:
     return DashboardConfig(
         enabled_plugins=_parse_enabled(data, path),
         layout_rows=_parse_layout_rows(data, path),
+        trigger_command=_parse_trigger_command(data, path),
     )
 
 
@@ -100,3 +102,15 @@ def _parse_layout_rows(data: dict, path: Path) -> list[list[str]]:
                 f"{path}: each [layout].rows entry must be a list of pane-id strings"
             )
     return rows
+
+
+def _parse_trigger_command(data: dict, path: Path) -> str | None:
+    trigger = data.get("trigger", {})
+    if not isinstance(trigger, dict):
+        raise InvalidConfigError(f"{path}: [trigger] must be a table/dictionary")
+    command = trigger.get("command")
+    if command is None:
+        return None
+    if not isinstance(command, str):
+        raise InvalidConfigError(f"{path}: [trigger].command must be a string")
+    return command

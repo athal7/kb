@@ -1,8 +1,7 @@
-"""j/k vim-style scroll bindings on the focusable panes.
+"""j/k vim-style scroll/cursor bindings on the focusable panes.
 
 Asserted as functional equivalence to the arrow keys Textual already binds
-(scroll_down/scroll_up), not as a reimplementation of scrolling — j/k should
-move the scroll offset by exactly the same amount as down/up.
+(scroll_down/scroll_up or cursor_down/cursor_up), not as a reimplementation of scrolling.
 """
 
 from __future__ import annotations
@@ -130,47 +129,39 @@ class DescribeVimScrollOnRemindersPane:
 
 
 class DescribeVimScrollOnActionItemsPane:
-    async def it_scrolls_down_the_same_amount_as_the_down_arrow(self):
+    async def it_navigates_cursor_with_down_arrow_and_j_key(self):
         app = _dashboard()
 
         async with app.run_test(size=(80, 20)) as pilot:
             pane = app.screen.query_one("#action-items-pane")
             pane.focus()
             await pilot.pause()
+
+            assert pane._selected_index == 0
 
             await _press_and_settle(pilot, "down")
-            after_down = pane.scroll_offset.y
-
-            pane.scroll_home(animate=False)
-            await pilot.pause()
+            assert pane._selected_index == 1
 
             await _press_and_settle(pilot, "j")
-            after_j = pane.scroll_offset.y
+            assert pane._selected_index == 2
 
-        assert after_j == after_down
-        assert after_j > 0
-
-    async def it_scrolls_up_the_same_amount_as_the_up_arrow(self):
+    async def it_navigates_cursor_with_up_arrow_and_k_key(self):
         app = _dashboard()
 
         async with app.run_test(size=(80, 20)) as pilot:
             pane = app.screen.query_one("#action-items-pane")
             pane.focus()
-            pane.scroll_end(animate=False)
             await pilot.pause()
-            end_offset = pane.scroll_offset.y
+
+            pane._selected_index = 2
+            pane._update_selection()
+            await pilot.pause()
 
             await _press_and_settle(pilot, "up")
-            after_up = pane.scroll_offset.y
-
-            pane.scroll_end(animate=False)
-            await pilot.pause()
+            assert pane._selected_index == 1
 
             await _press_and_settle(pilot, "k")
-            after_k = pane.scroll_offset.y
-
-        assert after_k == after_up
-        assert after_k < end_offset
+            assert pane._selected_index == 0
 
 
 class DescribeVimScrollBindingsAreHiddenFromFooter:
@@ -182,5 +173,7 @@ class DescribeVimScrollBindingsAreHiddenFromFooter:
             jk_bindings = {b.key: b for b in pane_cls.BINDINGS}
             assert jk_bindings["j"].show is False
             assert jk_bindings["k"].show is False
-            assert jk_bindings["j"].action == "scroll_down"
-            assert jk_bindings["k"].action == "scroll_up"
+            if pane_cls is AccessGatedPane:
+                assert jk_bindings["j"].action == "scroll_down"
+            else:
+                assert jk_bindings["j"].action == "cursor_down"

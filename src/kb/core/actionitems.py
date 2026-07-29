@@ -1,12 +1,12 @@
 """Parse and byte-faithfully edit `action-items.md`.
 
 The file is the Phase 1 / Phase 2 seam. It is a flat list of `## From <date> (source)`
-groups plus an `## Ongoing / Unresolved` group, each holding `- [ ]` / `- [x]` items.
+groups plus an `## Ongoing / Unresolved` group, each holding `- [ ]` / `- [x]` / `- [-]` items.
 Items carry inline `[[wikilinks]]`, markdown `[text](url)` links, and plain-text Linear
 refs (e.g. `LUMEN-1732`), and are inconsistently prefixed with `**Person**:`.
 
-Editing is line-surgical: the file's exact lines are retained and a toggle rewrites only
-the single `[ ]`/`[x]` marker on the target line. We never round-trip through a markdown
+Editing is line-surgical: the file's exact lines are retained and a toggle/status update rewrites only
+the single `[ ]`/`[x]` / `[-]` marker on the target line. We never round-trip through a markdown
 AST, because that would reflow whitespace and confuse the daily enrichment run that reads
 this same file.
 """
@@ -20,7 +20,7 @@ from pathlib import Path
 ACTION_ITEMS_FILENAME = "action-items.md"
 
 _HEADING = re.compile(r"^##\s+(.*?)\s*$")
-_CHECKBOX = re.compile(r"^- \[([ xX])\]\s?(.*)$")
+_CHECKBOX = re.compile(r"^- \[([ xX-])\]\s?(.*)$")
 _BOLD_PREFIX = re.compile(r"^\*\*(.+?)\*\*:")
 _WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
 _MD_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
@@ -38,6 +38,7 @@ class ActionItem:
     wikilinks: list[str]
     external_links: list[str]
     linear_refs: list[str]
+    in_progress: bool = False
 
 
 @dataclass
@@ -65,12 +66,15 @@ class ActionItemsFile:
             cb = _CHECKBOX.match(line)
             if not cb:
                 continue
-            checked = cb.group(1) in ("x", "X")
+            marker_char = cb.group(1)
+            checked = marker_char in ("x", "X")
+            in_progress = marker_char == "-"
             body = cb.group(2)
             items.append(
                 ActionItem(
                     source_group=current_group,
                     checked=checked,
+                    in_progress=in_progress,
                     text=body,
                     raw_line=line,
                     line_no=i,
@@ -94,16 +98,46 @@ class ActionItemsFile:
             text += "\n"
         return text
 
-    def toggle(self, item: ActionItem) -> None:
-        """Flip the checkbox marker on `item`'s line, changing nothing else."""
-        new_checked = not item.checked
-        marker = "[x]" if new_checked else "[ ]"
-        old_marker = "[x]" if item.checked else "[ ]"
+    def set_status(self, item: ActionItem, status: str) -> None:
+        """Set checkbox status explicitly.
+
+        status is one of: "completed", "in_progress", "todo"
+        """
+        if status == "completed":
+            marker = "[x]"
+            item.checked = True
+            item.in_progress = False
+        elif status == "in_progress":
+            marker = "[-]"
+            item.checked = False
+            item.in_progress = True
+        elif status == "todo":
+            marker = "[ ]"
+            item.checked = False
+            item.in_progress = False
+        else:
+            raise ValueError(f"Unknown status: {status}")
+
         line = self.lines[item.line_no]
-        # Replace only the first marker occurrence, preserving surrounding bytes.
-        self.lines[item.line_no] = line.replace(old_marker, marker, 1)
-        item.checked = new_checked
-        item.raw_line = self.lines[item.line_no]
+        # Match the existing marker and replace it
+        m = _CHECKBOX.match(line)
+        if m:
+            old_char = m.group(1)
+            old_marker = f"[{old_char}]"
+            self.lines[item.line_no] = line.replace(old_marker, marker, 1)
+            item.raw_line = self.lines[item.line_no]
+
+    def toggle(self, item: ActionItem) -> None:
+        """Flip the checkbox marker on `item`'s line, changing nothing else.
+
+        If in_progress, toggling completed sets it to [x].
+        If completed, toggling unchecks it to [ ].
+        If [ ], toggling checks it to [x].
+        """
+        if item.checked:
+            self.set_status(item, "todo")
+        else:
+            self.set_status(item, "completed")
 
 
 def load_action_items(kb_root: Path) -> list[ActionItem]:

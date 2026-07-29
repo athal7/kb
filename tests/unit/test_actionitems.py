@@ -14,6 +14,7 @@ SAMPLE = """# Open Action Items
 ## From 2026-07-07 (Slack)
 - [ ] **Diego**: Attend All-MoCo meeting
 - [ ] **Team**: sync name updated
+- [-] **Stephen**: Ongoing task in progress
 
 ## From 2026-07-02 (Lumen Check-in)
 - [x] **Diego**: Complete Meridian AI deployment — done 2026-07-07
@@ -31,6 +32,7 @@ class DescribeParse:
         assert [i.source_group for i in f.items] == [
             "From 2026-07-07 (Slack)",
             "From 2026-07-07 (Slack)",
+            "From 2026-07-07 (Slack)",
             "From 2026-07-02 (Lumen Check-in)",
             "From 2026-07-02 (Lumen Check-in)",
             "Ongoing / Unresolved",
@@ -40,17 +42,23 @@ class DescribeParse:
         f = ActionItemsFile.parse(SAMPLE)
 
         checked = [i.checked for i in f.items]
-        assert checked == [False, False, True, False, False]
+        assert checked == [False, False, False, True, False, False]
+
+    def it_captures_in_progress_state(self):
+        f = ActionItemsFile.parse(SAMPLE)
+
+        in_progress = [i.in_progress for i in f.items]
+        assert in_progress == [False, False, True, False, False, False]
 
     def it_extracts_bold_person_prefix_when_present(self):
         f = ActionItemsFile.parse(SAMPLE)
 
         assert f.items[0].person_prefix == "Diego"
-        assert f.items[4].person_prefix is None  # Storage migration item has no bold prefix
+        assert f.items[5].person_prefix is None  # Storage migration item has no bold prefix
 
     def it_extracts_wikilinks_external_links_and_linear_refs(self):
         f = ActionItemsFile.parse(SAMPLE)
-        priya = f.items[3]
+        priya = f.items[4]
 
         assert priya.wikilinks == ["Firefox"]
         assert priya.external_links == ["https://x/1"]
@@ -111,7 +119,7 @@ class DescribeToggle:
 
     def it_unchecks_a_checked_item(self):
         f = ActionItemsFile.parse(SAMPLE)
-        target = f.items[2]  # the "- [x] ..." Vertex item
+        target = f.items[3]  # the "- [x] ..." Vertex item
 
         f.toggle(target)
 
@@ -124,6 +132,37 @@ class DescribeToggle:
         f.toggle(target)
 
         assert target.checked is True
+
+    def it_toggles_in_progress_to_completed(self):
+        f = ActionItemsFile.parse(SAMPLE)
+        target = f.items[2]  # "- [-] **Stephen**: Ongoing task in progress"
+
+        f.toggle(target)
+
+        assert target.checked is True
+        assert target.in_progress is False
+        assert f.serialize().split("\n")[target.line_no].startswith("- [x]")
+
+
+class DescribeSetStatus:
+    def it_sets_status_explicitly(self):
+        f = ActionItemsFile.parse(SAMPLE)
+        target = f.items[0]
+
+        f.set_status(target, "in_progress")
+        assert target.in_progress is True
+        assert target.checked is False
+        assert f.serialize().split("\n")[target.line_no].startswith("- [-]")
+
+        f.set_status(target, "completed")
+        assert target.in_progress is False
+        assert target.checked is True
+        assert f.serialize().split("\n")[target.line_no].startswith("- [x]")
+
+        f.set_status(target, "todo")
+        assert target.in_progress is False
+        assert target.checked is False
+        assert f.serialize().split("\n")[target.line_no].startswith("- [ ]")
 
 
 class DescribeLoadActionItems:

@@ -92,3 +92,24 @@ PeopleSearch Input {
 PeopleSearch ListView {
     height: 1fr;
 }
+
+/* Action Items selection & in-progress styles */
+.action-item {
+    color: $text;
+}
+
+.action-item.-selected {
+    background: $accent-lighten-2;
+    color: $text;
+    text-style: bold;
+}
+
+.action-item.-in-progress {
+    color: $warning;
+}
+
+.action-item.-in-progress.-selected {
+    background: $accent-lighten-2;
+    color: $warning;
+    text-style: bold;
+}
