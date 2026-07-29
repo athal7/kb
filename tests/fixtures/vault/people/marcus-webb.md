@@ -1,18 +1,18 @@
 ---
 type: person
-email: athal@example.com
+email: mwebb@example.com
 team: Engineering
 title: Staff Software Engineer
-slack: U0A0EDLDC67
+slack: U0A0FAKE01
 aliases:
-  - Andrew Thal
-  - Andrew
-  - athal
+  - Marcus Webb
+  - Marcus
+  - mwebb
 projects:
-  - "[[Firewall]]"
+  - "[[Sentinel]]"
 last_updated: 2026-07-10
 ---
-# Andrew Thal
+# Marcus Webb
 ## Current
 - Owns gRPC validation work
 ## Style

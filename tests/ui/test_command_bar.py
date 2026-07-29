@@ -196,11 +196,11 @@ class DescribeGotoCommand:
 
         async with app.run_test() as pilot:
             await pilot.press("colon")
-            await _submit(pilot, "goto Andre")
+            await _submit(pilot, "goto Elena")
 
         assert calls
         message, kwargs = calls[-1]
-        assert message == "Found: Andre"
+        assert message == "Found: Elena"
         assert kwargs.get("severity") == "information"
 
     async def it_warns_when_no_such_entity_exists(self):
@@ -238,12 +238,12 @@ class DescribeGotoCommand:
 
         async with app.run_test() as pilot:
             await pilot.press("colon")
-            # "silverstien" is an unambiguous typo — only Kate Silverstein is close.
-            await _submit(pilot, "goto silverstien")
+            # "anandd" is an unambiguous typo — only Priya Anand is close.
+            await _submit(pilot, "goto anandd")
 
         assert calls
         message, kwargs = calls[-1]
-        assert message == "Found: Kate Silverstein"
+        assert message == "Found: Priya Anand"
         assert kwargs.get("severity") == "information"
 
     async def it_offers_ranked_suggestions_when_several_plausibly_match(self):
@@ -253,14 +253,14 @@ class DescribeGotoCommand:
 
         async with app.run_test() as pilot:
             await pilot.press("colon")
-            # "andr" is close to both "Andre" and "Andrew"/"Andrew Thal".
-            await _submit(pilot, "goto andr")
+            # "na" is a substring shared by both "Elena" and "Priya Anand".
+            await _submit(pilot, "goto na")
 
         assert calls
-        message, kwargs = calls[-1]
+        message, _kwargs = calls[-1]
         assert message.startswith("Did you mean: ")
-        assert "Andre" in message
-        assert "Andrew Thal" in message
+        assert "Elena" in message
+        assert "Priya Anand" in message
 
     async def it_still_warns_when_nothing_even_fuzzily_matches(self):
         app = _dashboard()

@@ -6,7 +6,7 @@ This layer sits on top of `frontmatter.split` and `markdown.split_sections`/
   - `slack:` vs `slack_id:` — the SKILL doc documents `slack`, real files use `slack_id`.
     Both land in one `slack_id` field, preferring the explicit `slack_id` when both exist.
   - Frontmatter may be entirely absent (journal, decisions) — parsing never raises.
-  - Frontmatter list fields hold wikilink strings (`"[[Kate]]"`) that are unwrapped to
+  - Relationship list fields hold wikilink strings (`"[[Priya]]"`) that are unwrapped to
     raw targets for later resolution, tolerating stray brackets/whitespace.
   - Journals have no fixed heading schema and no frontmatter; the H1 date is the identity,
     with the filename date as a fallback.

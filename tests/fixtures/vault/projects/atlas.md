@@ -2,9 +2,9 @@
 type: project
 status: blocked
 aliases:
-  - Webservices
+  - Atlas
 last_updated: 2026-06-20
 ---
-# Webservices
+# Atlas
 ## Status
 - Blocked on AWS account access
