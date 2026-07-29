@@ -117,6 +117,13 @@ class DescribeLoadConfig:
         with pytest.raises(InvalidConfigError):
             load_config(path)
 
+    def it_raises_invalid_config_when_trigger_is_a_scalar_string(self, tmp_path):
+        path = tmp_path / "config.toml"
+        path.write_text('trigger = "agent"\n')
+
+        with pytest.raises(InvalidConfigError):
+            load_config(path)
+
 
 class DescribeDefaultConfigPath:
     def it_points_at_xdg_config_home_when_set(self, tmp_path, monkeypatch):

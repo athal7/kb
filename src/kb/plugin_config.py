@@ -106,6 +106,8 @@ def _parse_layout_rows(data: dict, path: Path) -> list[list[str]]:
 
 def _parse_trigger_command(data: dict, path: Path) -> str | None:
     trigger = data.get("trigger", {})
+    if not isinstance(trigger, dict):
+        raise InvalidConfigError(f"{path}: [trigger] must be a table/dictionary")
     command = trigger.get("command")
     if command is None:
         return None

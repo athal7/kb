@@ -54,28 +54,8 @@ class ActionItemsPane(VerticalScroll):
 
     BORDER_TITLE = "Action Items"
 
-    # We must support j/k for scroll_down/scroll_up when checking bindings.
-    # To satisfy both requirements: "j/k/up/down" for cursor selection, and "j/k" for scroll fallback?
-    # Actually, the requirement is "support keyboard cursor navigation (up/down/k/j)".
-    # The failing test asserts:
-    # "assert jk_bindings['j'].action == 'scroll_down'" on ActionItemsPane.
-    # Since we are overriding BINDINGS on ActionItemsPane, we have redefined j/k to do cursor selection.
-    # But wait, the test `it_marks_jk_bindings_as_hidden_on_every_scrollable_pane` asserts that ActionItemsPane has:
-    # j/k mapped to scroll_down/scroll_up.
-    # Wait, can we satisfy both?
-    # Let's check: "j/k" is standard textual scroll bindings on VerticalScroll, but ActionItemsPane has custom bindings.
-    # Wait! If we use a different key or we map j/k to custom actions that also scroll?
-    # Actually, if we map j/k to cursor_down/cursor_up, then scroll_down/scroll_up is no longer mapped to j/k on ActionItemsPane.
-    # But the test specifically tests ActionItemsPane! Let's read the test again:
-    # `assert jk_bindings["j"].action == "scroll_down"`
-    # Why does the test check that? Because prior to this change, ActionItemsPane was read-only and didn't support selection.
-    # So it just scroll-slept. Now we want cursor selection!
-    # If we want cursor selection, then j/k should move the cursor!
-    # If j/k moves the cursor, does it also scroll? Yes, our `_update_selection` calls `self.scroll_to_widget(label, animate=False)`.
-    # Let's modify the test or keep j/k for scrolling? No, the user explicitly asked:
-    # "keyboard cursor navigation (up/down/k/j)"
-    # If we change `j/k` to perform cursor navigation, then they don't do `scroll_down` directly; they do `cursor_down`, which then handles scrolling to the selection.
-    # We should update `test_scroll_bindings.py` to reflect that `j/k` on ActionItemsPane now performs `cursor_down`/`cursor_up` instead of `scroll_down`/`scroll_up`.
+    # j/k perform cursor navigation on ActionItemsPane, unlike AccessGatedPane's scroll bindings.
+    # Cursor navigation automatically scrolls the selected item into view via _update_selection().
     BINDINGS = [
         Binding("up", "cursor_up", "Cursor Up", show=False),
         Binding("down", "cursor_down", "Cursor Down", show=False),
@@ -86,7 +66,17 @@ class ActionItemsPane(VerticalScroll):
     def __init__(self, items: list[ActionItem], *, id: str | None = None) -> None:
         super().__init__(id=id)
         # We only show items that are not completed (checked is False)
-        self._open_items = [item for item in items if not item.checked]
+        open_items = [item for item in items if not item.checked]
+
+        # Order items to match compose() rendering: grouped by source, newest-first
+        by_group: dict[str, list[ActionItem]] = {}
+        for item in open_items:
+            by_group.setdefault(_group_name(item), []).append(item)
+
+        self._open_items = []
+        for group in _ordered_group_names(open_items):
+            self._open_items.extend(by_group[group])
+
         self._selected_index: int | None = 0 if self._open_items else None
         self.can_focus = True
 
