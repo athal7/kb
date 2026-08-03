@@ -53,6 +53,16 @@ class DescribeHelp:
         assert "action-items" in result.output
 
 
+class DescribeVersion:
+    def it_prints_the_installed_package_version(self):
+        from importlib.metadata import version
+
+        result = CliRunner().invoke(cli, ["--version"])
+
+        assert result.exit_code == 0
+        assert result.output.strip() == f"cli, version {version('kb')}"
+
+
 class DescribePeopleList:
     def it_prints_a_json_array_of_every_fixture_person(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(VAULT))
