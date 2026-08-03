@@ -115,6 +115,7 @@ def _person_to_dict(person: Person) -> dict:
 
 
 @click.group(invoke_without_command=True)
+@click.version_option(package_name="kb")
 @click.pass_context
 def cli(ctx: click.Context) -> None:
     """Browse and manage your personal knowledge-base vault.
