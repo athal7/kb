@@ -5,8 +5,8 @@ groups plus an `## Ongoing / Unresolved` group, each holding `- [ ]` / `- [x]` /
 Items carry inline `[[wikilinks]]`, markdown `[text](url)` links, and plain-text Linear
 refs (e.g. `LUMEN-1732`), and are inconsistently prefixed with `**Person**:`.
 
-Editing is line-surgical: the file's exact lines are retained and a toggle/status update rewrites only
-the single `[ ]`/`[x]` / `[-]` marker on the target line. We never round-trip through a markdown
+Editing is line-surgical: the file's exact lines are retained and a toggle/status update
+rewrites only the single `[ ]`/`[x]` / `[-]` marker on the target line. We never round-trip
 AST, because that would reflow whitespace and confuse the daily enrichment run that reads
 this same file.
 """
