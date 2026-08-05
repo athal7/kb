@@ -69,6 +69,7 @@ class Person:
     team: str | None
     title: str | None
     slack_id: str | None
+    github: str | None
     aliases: list[str]
     project_links: list[Wikilink]
     sections: list[Section]

@@ -43,6 +43,7 @@ class DescribePersonToProfile:
             team=None,
             title=None,
             slack_id=None,
+            github=None,
             aliases=[],
             project_links=[],
             sections=[],
@@ -61,6 +62,7 @@ class DescribePersonToProfile:
             team="Research",
             title="ML Researcher",
             slack_id="U06EFAKE02",
+            github="panand-gh",
             aliases=["Priya", "Priya Anand"],
             project_links=[
                 Wikilink(raw_text="Sentinel", source_file="people/panand.md", source_line=5)
@@ -86,6 +88,7 @@ class DescribePersonToProfile:
         assert profile.fields["team"] == "Research"
         assert profile.fields["title"] == "ML Researcher"
         assert profile.fields["slack_id"] == "U06EFAKE02"
+        assert profile.fields["github"] == "panand-gh"
         assert profile.fields["aliases"] == ["Priya", "Priya Anand"]
         assert profile.sections[0].heading == "Current"
         assert profile.sections[0].body == "ML researcher"
@@ -101,6 +104,7 @@ class DescribePersonToProfile:
             team=None,
             title=None,
             slack_id=None,
+            github=None,
             aliases=[],
             project_links=[],
             sections=[],
@@ -119,6 +123,7 @@ class DescribePersonToProfile:
             team=None,
             title=None,
             slack_id=None,
+            github=None,
             aliases=[],
             project_links=[
                 Wikilink(

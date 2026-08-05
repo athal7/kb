@@ -82,6 +82,7 @@ def person_to_profile(person: Person, resolver: WikilinkResolver) -> Profile:
             "team": person.team,
             "title": person.title,
             "slack_id": person.slack_id,
+            "github": person.github,
             "aliases": person.aliases,
         },
         sections=[_translate_section(s) for s in person.sections],

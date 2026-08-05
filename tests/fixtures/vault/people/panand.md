@@ -8,6 +8,7 @@ aliases:
   - Priya
 last_updated: 2026-06-29
 slack_id: U06EFAKE02
+github: panand-gh
 projects:
   - "[[Sentinel]]"
 ---

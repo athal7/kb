@@ -110,6 +110,7 @@ def _person_to_dict(person: Person) -> dict:
         "team": person.team,
         "email": person.email,
         "slack_id": person.slack_id,
+        "github": person.github,
         "aliases": person.aliases,
     }
 

@@ -93,6 +93,7 @@ def parse_person(text: str, *, file: str) -> Person:
         team=_str_or_none(fm, "team"),
         title=_str_or_none(fm, "title"),
         slack_id=slack_id,
+        github=_str_or_none(fm, "github"),
         aliases=_aliases(fm),
         project_links=_wikilinks_from_frontmatter(fm, "projects", file),
         sections=split_sections(result.body),
