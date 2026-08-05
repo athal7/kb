@@ -51,6 +51,8 @@ class DescribeHelp:
         assert result.exit_code == 0
         assert "people" in result.output
         assert "action-items" in result.output
+        assert "projects" in result.output
+        assert "products" in result.output
 
 
 class DescribeVersion:
@@ -110,6 +112,111 @@ class DescribePeopleShow:
         monkeypatch.setenv("KB_ROOT", str(VAULT))
 
         result = CliRunner().invoke(cli, ["people", "show", "Nobody Real"])
+
+        assert result.exit_code != 0
+        assert "not found" in (result.output + str(result.exception))
+
+
+class DescribeProjectsList:
+    def it_prints_a_json_array_of_every_fixture_project(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["projects", "list"])
+
+        assert result.exit_code == 0
+        projects = json.loads(result.output)
+        assert isinstance(projects, list)
+        assert len(projects) == 2
+        expected_keys = {"name", "status", "product", "github", "linear", "aliases", "people"}
+        assert expected_keys <= projects[0].keys()
+
+    def it_respects_the_kb_root_env_var_override(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "projects").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        result = CliRunner().invoke(cli, ["projects", "list"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == []
+
+
+class DescribeProjectsShow:
+    def it_prints_the_matching_projects_record_as_json(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["projects", "show", "Atlas"])
+
+        assert result.exit_code == 0
+        project = json.loads(result.output)
+        assert project["name"] == "Atlas"
+        assert project["status"] == "blocked"
+
+    def it_resolves_by_alias_not_just_the_canonical_name(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["projects", "show", "Atlas"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.output)["name"] == "Atlas"
+
+    def it_exits_non_zero_with_an_error_indication_for_an_unknown_name(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["projects", "show", "Nobody Real"])
+
+        assert result.exit_code != 0
+        assert "not found" in (result.output + str(result.exception))
+
+
+class DescribeProductsList:
+    def it_prints_a_json_array_of_every_fixture_product(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["products", "list"])
+
+        assert result.exit_code == 0
+        products = json.loads(result.output)
+        assert isinstance(products, list)
+        assert len(products) == 1
+        assert {"name", "status", "repos", "linear", "aliases"} <= products[0].keys()
+
+    def it_respects_the_kb_root_env_var_override(self, monkeypatch, tmp_path):
+        (tmp_path / "people").mkdir()
+        (tmp_path / "products").mkdir()
+        (tmp_path / "journal").mkdir()
+        monkeypatch.setenv("KB_ROOT", str(tmp_path))
+
+        result = CliRunner().invoke(cli, ["products", "list"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == []
+
+
+class DescribeProductsShow:
+    def it_prints_the_matching_products_record_as_json(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["products", "show", "LUMEN"])
+
+        assert result.exit_code == 0
+        product = json.loads(result.output)
+        assert product["name"] == "LUMEN"
+        assert product["status"] == "active"
+
+    def it_resolves_by_alias_not_just_the_canonical_name(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["products", "show", "lumen.ai"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.output)["name"] == "LUMEN"
+
+    def it_exits_non_zero_with_an_error_indication_for_an_unknown_name(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["products", "show", "Nobody Real"])
 
         assert result.exit_code != 0
         assert "not found" in (result.output + str(result.exception))
