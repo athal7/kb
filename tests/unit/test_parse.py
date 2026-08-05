@@ -25,6 +25,7 @@ class DescribeParsePerson:
             "email: k@example.com\n"
             "team: Research\n"
             "title: ML Researcher\n"
+            "github: panand-gh\n"
             "aliases:\n  - Priya\n"
             "---\n"
             "# Priya Anand\n"
@@ -36,6 +37,7 @@ class DescribeParsePerson:
         assert person.email == "k@example.com"
         assert person.team == "Research"
         assert person.title == "ML Researcher"
+        assert person.github == "panand-gh"
         assert person.aliases == ["Priya"]
 
     def it_normalizes_slack_id_drift_from_documented_slack_key(self):
@@ -65,6 +67,7 @@ class DescribeParsePerson:
         person = parse.parse_person("# Just A Body\nno frontmatter here\n", file="people/p.md")
 
         assert person.email is None
+        assert person.github is None
         assert person.aliases == []
         assert person.project_links == []
 

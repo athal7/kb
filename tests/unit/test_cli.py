@@ -97,6 +97,17 @@ class DescribePeopleShow:
         assert person["name"] == "Marcus Webb"
         assert person["title"] == "Staff Software Engineer"
         assert person["team"] == "Engineering"
+        assert person["github"] is None
+
+    def it_includes_github_field_in_the_record(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["people", "show", "Priya Anand"])
+
+        assert result.exit_code == 0
+        person = json.loads(result.output)
+        assert person["name"] == "Priya Anand"
+        assert person["github"] == "panand-gh"
 
     def it_resolves_by_alias_not_just_the_canonical_name(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(VAULT))
