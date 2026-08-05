@@ -16,6 +16,10 @@ class DescribeContractPublicApi:
 
     def it_exports_the_schema_pack_types(self):
         from kb.contract import (
+            CodingActivityLedgerEntry,
+            CodingActivityPayload,
+            CodingSessionDocument,
+            CodingSessionProvenance,
             Document,
             LedgerEntry,
             Profile,
@@ -26,6 +30,12 @@ class DescribeContractPublicApi:
 
         assert Profile and Section and Relationship
         assert ResolutionMapEntry and LedgerEntry and Document
+        assert (
+            CodingActivityLedgerEntry
+            and CodingActivityPayload
+            and CodingSessionDocument
+            and CodingSessionProvenance
+        )
 
     def it_exports_the_translate_functions(self):
         from kb.contract import person_to_profile, project_to_profile

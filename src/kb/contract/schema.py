@@ -14,7 +14,7 @@ from typing import Any
 from pydantic import TypeAdapter
 
 from kb.contract.envelope import ContractResponse
-from kb.contract.schema_pack import Profile
+from kb.contract.schema_pack import CodingActivityLedgerEntry, CodingSessionDocument, Profile
 
 
 def contract_schema() -> dict[str, Any]:
@@ -33,4 +33,6 @@ def contract_schema() -> dict[str, Any]:
     return {
         "ContractResponse": TypeAdapter(ContractResponse[dict]).json_schema(),
         "Profile": Profile.model_json_schema(),
+        "CodingSessionDocument": CodingSessionDocument.model_json_schema(),
+        "CodingActivityLedgerEntry": CodingActivityLedgerEntry.model_json_schema(),
     }

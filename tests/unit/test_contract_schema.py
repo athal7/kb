@@ -22,3 +22,14 @@ class DescribeContractSchema:
         schema = contract_schema()
 
         assert set(schema["Profile"]["required"]) >= {"ref", "kind"}
+
+    def it_includes_new_coding_activity_schemas(self):
+        schema = contract_schema()
+
+        assert "CodingSessionDocument" in schema
+        assert "CodingActivityLedgerEntry" in schema
+        assert schema["CodingSessionDocument"]["type"] == "object"
+        assert schema["CodingActivityLedgerEntry"]["type"] == "object"
+        # Verify nested schema structure under properties
+        assert "provenance" in schema["CodingSessionDocument"]["properties"]
+        assert "payload" in schema["CodingActivityLedgerEntry"]["properties"]

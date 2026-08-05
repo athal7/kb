@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class Section(BaseModel):
@@ -85,3 +85,47 @@ class Document(BaseModel):
     kind: str
     body: str
     provenance: dict[str, Any] | None = None
+
+
+class CodingSessionProvenance(BaseModel):
+    """Provenance details for a coding session."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    agent: str  # e.g. "opencode", "omp"
+    session_id: str
+    started_at: datetime
+    ended_at: datetime | None = None
+    duration_seconds: int | None = None
+
+
+class CodingSessionDocument(Document):
+    """A standard Document representing a coding session transcript and metadata."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    kind: str = "coding-session"
+    provenance: CodingSessionProvenance
+
+
+class CodingActivityPayload(BaseModel):
+    """The JSON payload for a coding activity ledger entry."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    project: str
+    agent: str
+    session_id: str
+    timestamp: datetime
+    commits_count: int | None = None
+    files_changed: int | None = None
+    insertions: int | None = None
+    deletions: int | None = None
+
+
+class CodingActivityLedgerEntry(LedgerEntry):
+    """A standard LedgerEntry representing a coding activity event."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    payload: CodingActivityPayload

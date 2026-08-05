@@ -11,6 +11,10 @@ from kb.contract.envelope import ContractResponse, ContractWarning, ErrorRespons
 from kb.contract.errors import ContractError
 from kb.contract.schema import contract_schema
 from kb.contract.schema_pack import (
+    CodingActivityLedgerEntry,
+    CodingActivityPayload,
+    CodingSessionDocument,
+    CodingSessionProvenance,
     Document,
     LedgerEntry,
     Profile,
@@ -23,6 +27,10 @@ from kb.contract.version import CONTRACT_VERSION
 
 __all__ = [
     "CONTRACT_VERSION",
+    "CodingActivityLedgerEntry",
+    "CodingActivityPayload",
+    "CodingSessionDocument",
+    "CodingSessionProvenance",
     "ContractError",
     "ContractResponse",
     "ContractWarning",

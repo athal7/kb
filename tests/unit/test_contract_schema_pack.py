@@ -12,6 +12,10 @@ import pytest
 from pydantic import ValidationError
 
 from kb.contract.schema_pack import (
+    CodingActivityLedgerEntry,
+    CodingActivityPayload,
+    CodingSessionDocument,
+    CodingSessionProvenance,
     Document,
     LedgerEntry,
     Profile,
@@ -127,3 +131,92 @@ class DescribeDocument:
     def it_rejects_a_document_missing_a_body(self):
         with pytest.raises(ValidationError):
             Document(namespace="athal7/kb", kind="standing")
+
+
+class DescribeCodingSessionProvenance:
+    def it_validates_required_fields_and_supports_extra_for_compatibility(self):
+        prov = CodingSessionProvenance(
+            agent="opencode",
+            session_id="session_123",
+            started_at=datetime(2026, 7, 15, 10, 0, 0),
+            ended_at=datetime(2026, 7, 15, 11, 0, 0),
+            duration_seconds=3600,
+            extra_field_for_compatibility="ignored_data",
+        )
+        assert prov.agent == "opencode"
+        assert prov.session_id == "session_123"
+        assert prov.started_at == datetime(2026, 7, 15, 10, 0, 0)
+        assert prov.ended_at == datetime(2026, 7, 15, 11, 0, 0)
+        assert prov.duration_seconds == 3600
+
+    def it_rejects_missing_required_fields(self):
+        with pytest.raises(ValidationError):
+            CodingSessionProvenance(agent="opencode")
+
+
+class DescribeCodingSessionDocument:
+    def it_constructs_a_document_with_kind_and_provenance(self):
+        prov = CodingSessionProvenance(
+            agent="omp",
+            session_id="session_abc",
+            started_at=datetime(2026, 7, 15, 12, 0, 0),
+        )
+        doc = CodingSessionDocument(
+            namespace="my-project",
+            kind="coding-session",
+            body="User: Hello\nAgent: Hi",
+            provenance=prov,
+        )
+        assert doc.namespace == "my-project"
+        assert doc.kind == "coding-session"
+        assert doc.provenance.agent == "omp"
+        assert doc.provenance.session_id == "session_abc"
+
+    def it_rejects_invalid_provenance_type(self):
+        with pytest.raises(ValidationError):
+            CodingSessionDocument(
+                namespace="my-project",
+                body="Hello",
+                provenance={"invalid": "provenance"},
+            )
+
+
+class DescribeCodingActivityPayload:
+    def it_validates_required_fields_and_allows_optional_metrics(self):
+        payload = CodingActivityPayload(
+            project="kb",
+            agent="omp",
+            session_id="session_xyz",
+            timestamp=datetime(2026, 7, 15, 14, 0, 0),
+            commits_count=3,
+            files_changed=5,
+            insertions=120,
+            deletions=45,
+            unrecognized_field_compatibility="is_fine_and_ignored",
+        )
+        assert payload.project == "kb"
+        assert payload.agent == "omp"
+        assert payload.session_id == "session_xyz"
+        assert payload.commits_count == 3
+        assert payload.files_changed == 5
+        assert payload.insertions == 120
+        assert payload.deletions == 45
+
+
+class DescribeCodingActivityLedgerEntry:
+    def it_embeds_payload_and_key_correctly(self):
+        payload = CodingActivityPayload(
+            project="kb",
+            agent="omp",
+            session_id="session_xyz",
+            timestamp=datetime(2026, 7, 15, 14, 0, 0),
+        )
+        entry = CodingActivityLedgerEntry(
+            key="omp:session_xyz",
+            payload=payload,
+            timestamp=datetime(2026, 7, 15, 14, 0, 0),
+        )
+        assert entry.key == "omp:session_xyz"
+        assert entry.payload.project == "kb"
+        assert entry.payload.agent == "omp"
+        assert entry.timestamp == datetime(2026, 7, 15, 14, 0, 0)
