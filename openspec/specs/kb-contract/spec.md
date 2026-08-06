@@ -99,3 +99,23 @@ The CLI transport SHALL emit the Contract envelope as JSON on stdout by default,
 - **WHEN** `kb contract version` or `kb contract schema` is invoked
 - **THEN** the CLI returns the current contract semver or its JSON Schema respectively
 
+### Requirement: Coding Activity and Session Contract
+To support tool-agnostic coding rollups and downstream enrichment, the Contract SHALL define the expected payload and metadata structure for coding session documents and activity entries.
+
+#### Scenario: Coding session document shape
+- **WHEN** a Coding Activity Source supplies a coding session to the Engine
+- **THEN** it SHALL map it to a standard `Document` primitive where:
+  - `namespace` is the unique repository or project name
+  - `kind` is set to `"coding-session"`
+  - `body` contains the session transcript or textual interaction history
+  - `provenance` is a dictionary containing at least:
+    - `agent`: the name of the coding agent (e.g., `"opencode"`, `"omp"`)
+    - `session_id`: the agent-specific unique session identifier
+    - `started_at` and `ended_at`: ISO-8601 timestamps of the session
+    - `duration_seconds`: an integer representing the active duration
+
+#### Scenario: Coding activity ledger shape
+- **WHEN** a Coding Activity Source registers a session rollup
+- **THEN** it SHALL write a `LedgerEntry` where:
+  - `key` is a composite of `agent:session_id` to guarantee uniqueness and idempotent latest-wins updates
+  - `payload` includes the session metadata: `project`, `agent`, `timestamp`, and optionally `diff_stats` summary

@@ -68,3 +68,10 @@ A Schema pack SHALL be the data-driven definition mapping the four primitives to
 - **THEN** every file kind (people/products/projects/decisions/journal/name-maps/openspec docs) is readable and writable through the Contract with no data migration required
 - **AND** the product-vs-project distinction, the empty-string suppress sentinel, and any reserved keys (e.g. `_org`) in resolution maps are preserved exactly
 
+### Requirement: Term — Coding Activity Source
+A Coding Activity Source SHALL be a pluggable, tool-agnostic provider of coding session metadata and session transcripts. It enables aggregating activity and extracting facts across multiple local AI coding agents (such as `opencode` and `omp`).
+
+#### Scenario: Tool-agnostic enrichment
+- **WHEN** the enrichment pipeline requests coding activity for a given period
+- **THEN** it queries all configured Coding Activity Sources (e.g. `opencode`, `omp`)
+- **AND** converts their heterogeneous native session structures into standard KB-contract representations (such as `Document` and `Ledger` entries) so that downstream rollups, decisions, and action-items extraction are completely decoupled from individual agent database schemas.

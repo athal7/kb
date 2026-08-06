@@ -16,9 +16,9 @@ typed Contract scaffolding and JSON Schema generation working end-to-end.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class Section(BaseModel):
@@ -85,3 +85,56 @@ class Document(BaseModel):
     kind: str
     body: str
     provenance: dict[str, Any] | None = None
+
+
+class CodingSessionProvenance(BaseModel):
+    """Provenance details for a coding session."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    agent: str  # e.g. "opencode", "omp"
+    session_id: str
+    started_at: datetime
+    ended_at: datetime
+    duration_seconds: int
+
+
+class CodingSessionDocument(Document):
+    """A standard Document representing a coding session transcript and metadata."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    kind: Literal["coding-session"] = "coding-session"
+    provenance: CodingSessionProvenance
+
+
+class CodingActivityPayload(BaseModel):
+    """The JSON payload for a coding activity ledger entry."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    project: str
+    agent: str
+    session_id: str
+    timestamp: datetime
+    commits_count: int | None = None
+    files_changed: int | None = None
+    insertions: int | None = None
+    deletions: int | None = None
+
+
+class CodingActivityLedgerEntry(LedgerEntry):
+    """A standard LedgerEntry representing a coding activity event."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    payload: CodingActivityPayload
+
+    @model_validator(mode="after")
+    def _validate_key_matches_payload(self) -> CodingActivityLedgerEntry:
+        if self.key != f"{self.payload.agent}:{self.payload.session_id}":
+            raise ValueError(
+                f"key must match payload identity: expected "
+                f'"{self.payload.agent}:{self.payload.session_id}", got "{self.key}"'
+            )
+        return self
