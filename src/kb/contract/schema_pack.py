@@ -16,7 +16,7 @@ typed Contract scaffolding and JSON Schema generation working end-to-end.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -95,8 +95,8 @@ class CodingSessionProvenance(BaseModel):
     agent: str  # e.g. "opencode", "omp"
     session_id: str
     started_at: datetime
-    ended_at: datetime | None = None
-    duration_seconds: int | None = None
+    ended_at: datetime
+    duration_seconds: int
 
 
 class CodingSessionDocument(Document):
@@ -104,7 +104,7 @@ class CodingSessionDocument(Document):
 
     model_config = ConfigDict(extra="ignore")
 
-    kind: str = "coding-session"
+    kind: Literal["coding-session"] = "coding-session"
     provenance: CodingSessionProvenance
 
 
@@ -129,3 +129,12 @@ class CodingActivityLedgerEntry(LedgerEntry):
     model_config = ConfigDict(extra="ignore")
 
     payload: CodingActivityPayload
+
+    @model_validator(mode="after")
+    def _validate_key_matches_payload(self) -> CodingActivityLedgerEntry:
+        if self.key != f"{self.payload.agent}:{self.payload.session_id}":
+            raise ValueError(
+                f"key must match payload identity: expected "
+                f'"{self.payload.agent}:{self.payload.session_id}", got "{self.key}"'
+            )
+        return self

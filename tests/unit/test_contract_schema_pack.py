@@ -149,9 +149,13 @@ class DescribeCodingSessionProvenance:
         assert prov.ended_at == datetime(2026, 7, 15, 11, 0, 0)
         assert prov.duration_seconds == 3600
 
-    def it_rejects_missing_required_fields(self):
+    def it_rejects_missing_ended_at_and_duration_seconds(self):
         with pytest.raises(ValidationError):
-            CodingSessionProvenance(agent="opencode")
+            CodingSessionProvenance(
+                agent="opencode",
+                session_id="session_123",
+                started_at=datetime(2026, 7, 15, 10, 0, 0),
+            )
 
 
 class DescribeCodingSessionDocument:
@@ -160,6 +164,8 @@ class DescribeCodingSessionDocument:
             agent="omp",
             session_id="session_abc",
             started_at=datetime(2026, 7, 15, 12, 0, 0),
+            ended_at=datetime(2026, 7, 15, 13, 0, 0),
+            duration_seconds=3600,
         )
         doc = CodingSessionDocument(
             namespace="my-project",
@@ -220,3 +226,18 @@ class DescribeCodingActivityLedgerEntry:
         assert entry.payload.project == "kb"
         assert entry.payload.agent == "omp"
         assert entry.timestamp == datetime(2026, 7, 15, 14, 0, 0)
+
+    def it_rejects_a_mismatched_key(self):
+        payload = CodingActivityPayload(
+            project="kb",
+            agent="opencode",
+            session_id="session_abc",
+            timestamp=datetime(2026, 7, 15, 14, 0, 0),
+        )
+        with pytest.raises(ValidationError) as exc_info:
+            CodingActivityLedgerEntry(
+                key="omp:session_xyz",
+                payload=payload,
+                timestamp=datetime(2026, 7, 15, 14, 0, 0),
+            )
+        assert "key must match payload identity" in str(exc_info.value)
