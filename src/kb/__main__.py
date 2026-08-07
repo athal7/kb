@@ -30,7 +30,7 @@ from kb.core.actionitems import (
     load_action_items,
 )
 from kb.core.index import VaultIndex
-from kb.core.models import Person
+from kb.core.models import Person, Product, Project
 from kb.platform.eventkit_services import EventKitCalendarService, EventKitRemindersService
 from kb.plugin_config import default_config_path, load_config
 from kb.plugin_loader import build_pane_registry, discover_plugins
@@ -90,28 +90,50 @@ def _build_index() -> VaultIndex:
     return VaultIndex.build(kb_root)
 
 
-def _person_display_name(person: Person) -> str:
+def _entity_display_name(entity: Person | Project | Product) -> str:
     """The vault's H1-heading-is-the-display-name convention (see index.py's
-    _title_of) isn't exposed on Person itself, since VaultIndex only tracks
+    _title_of) isn't exposed on the entity itself, since VaultIndex only tracks
     it internally keyed by canonical name. Recompute it here from the
-    person's own sections, falling back to the file's canonical stem for a
-    person file with no H1 heading.
+    entity's own sections, falling back to the file's canonical stem for an
+    entity file with no H1 heading.
     """
-    for section in person.sections:
+    for section in entity.sections:
         if section.level == 1 and section.heading:
             return section.heading
-    return Path(person.file).stem
+    return Path(entity.file).stem
 
 
 def _person_to_dict(person: Person) -> dict:
     return {
-        "name": _person_display_name(person),
+        "name": _entity_display_name(person),
         "title": person.title,
         "team": person.team,
         "email": person.email,
         "slack_id": person.slack_id,
         "github": person.github,
         "aliases": person.aliases,
+    }
+
+
+def _project_to_dict(project: Project) -> dict:
+    return {
+        "name": _entity_display_name(project),
+        "status": project.status,
+        "product": project.product_link.raw_text if project.product_link else None,
+        "github": project.github,
+        "linear": project.linear,
+        "aliases": project.aliases,
+        "people": [link.raw_text for link in project.people_links],
+    }
+
+
+def _product_to_dict(product: Product) -> dict:
+    return {
+        "name": _entity_display_name(product),
+        "status": product.status,
+        "repos": product.repos,
+        "linear": product.linear_label,
+        "aliases": product.aliases,
     }
 
 
@@ -152,6 +174,60 @@ def people_show(ctx: click.Context, name: str) -> None:
         click.echo(json.dumps({"error": "not found", "name": name}), err=True)
         ctx.exit(1)
     click.echo(json.dumps(_person_to_dict(person), indent=2))
+
+
+@cli.group()
+def projects() -> None:
+    """Query projects recorded in the vault."""
+
+
+@projects.command("list")
+def projects_list() -> None:
+    """Print every project in the vault as a JSON array."""
+    index = _build_index()
+    click.echo(json.dumps([_project_to_dict(p) for p in index.all_projects()], indent=2))
+
+
+@projects.command("show")
+@click.argument("name")
+@click.pass_context
+def projects_show(ctx: click.Context, name: str) -> None:
+    """Print one project's record as JSON, looked up by name or alias."""
+    index = _build_index()
+    project = index.project(name)
+    if project is None:
+        # Keep stdout clean JSON-on-success; the error goes to stderr and the
+        # exit code is the actual success/failure signal for scripts.
+        click.echo(json.dumps({"error": "not found", "name": name}), err=True)
+        ctx.exit(1)
+    click.echo(json.dumps(_project_to_dict(project), indent=2))
+
+
+@cli.group()
+def products() -> None:
+    """Query products recorded in the vault."""
+
+
+@products.command("list")
+def products_list() -> None:
+    """Print every product in the vault as a JSON array."""
+    index = _build_index()
+    click.echo(json.dumps([_product_to_dict(p) for p in index.all_products()], indent=2))
+
+
+@products.command("show")
+@click.argument("name")
+@click.pass_context
+def products_show(ctx: click.Context, name: str) -> None:
+    """Print one product's record as JSON, looked up by name or alias."""
+    index = _build_index()
+    product = index.product(name)
+    if product is None:
+        # Keep stdout clean JSON-on-success; the error goes to stderr and the
+        # exit code is the actual success/failure signal for scripts.
+        click.echo(json.dumps({"error": "not found", "name": name}), err=True)
+        ctx.exit(1)
+    click.echo(json.dumps(_product_to_dict(product), indent=2))
 
 
 @cli.group("action-items")
