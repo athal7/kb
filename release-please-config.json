@@ -3,7 +3,8 @@
   "packages": {
     ".": {
       "release-type": "python",
-      "package-name": "kb"
+      "package-name": "kb",
+      "include-component-in-tag": false
     }
   }
 }
