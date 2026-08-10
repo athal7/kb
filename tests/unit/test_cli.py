@@ -53,6 +53,7 @@ class DescribeHelp:
         assert "action-items" in result.output
         assert "projects" in result.output
         assert "products" in result.output
+        assert "openspec" in result.output
 
 
 class DescribeVersion:

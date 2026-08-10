@@ -18,6 +18,7 @@ a config edit takes effect on the next launch, not the next refresh keypress.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import click
@@ -464,3 +465,110 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------------------
+# openspec — query archived OpenSpec changes and standing specs
+# ---------------------------------------------------------------------------
+
+from kb.core.openspec import OpenSpecStore
+
+
+def _openspec_store() -> OpenSpecStore:
+    """Resolve the OpenSpec store root and return a store instance.
+
+    The store root is resolved from the ``KB_OPENSPEC_ROOT`` environment
+    variable (for tests), or from ``KB_ROOT`` by appending ``openspec`` to
+    the parent directory.
+    """
+    env_root = os.environ.get("KB_OPENSPEC_ROOT")
+    if env_root:
+        return OpenSpecStore(Path(env_root))
+    kb_root = resolve_kb_root(None, validate=False)
+    return OpenSpecStore(kb_root / "openspec")
+
+
+@cli.group()
+def openspec() -> None:
+    """Query archived OpenSpec changes and standing specs."""
+
+
+@openspec.command("list")
+@click.option("--repo", help="Filter by repo-slug directory name.")
+@click.option(
+    "--from",
+    "from_date",
+    default=None,
+    help="Start date filter (YYYY-MM-DD, inclusive).",
+)
+@click.option(
+    "--to",
+    "to_date",
+    default=None,
+    help="End date filter (YYYY-MM-DD, inclusive).",
+)
+def openspec_list(
+    repo: str | None,
+    from_date: str | None,
+    to_date: str | None,
+) -> None:
+    """Print all archived OpenSpec changes as a JSON array."""
+    store = _openspec_store()
+    archives = store.list_archives(repo=repo, from_date=from_date, to_date=to_date)
+    click.echo(json.dumps(archives, indent=2))
+
+
+@openspec.command("show")
+@click.argument("change_name")
+@click.option("--repo", help="Scope the search to a specific repo-slug.")
+@click.pass_context
+def openspec_show(
+    ctx: click.Context,
+    change_name: str,
+    repo: str | None,
+) -> None:
+    """Print one change's metadata and design.md as JSON."""
+    store = _openspec_store()
+    result = store.show_archive(change_name, repo=repo)
+    if result is None:
+        click.echo(
+            json.dumps({"error": "not found", "change": change_name}),
+            err=True,
+        )
+        ctx.exit(1)
+    click.echo(json.dumps(result, indent=2))
+
+
+@openspec.group()
+def specs() -> None:
+    """Query standing specs from the OpenSpec store."""
+
+
+@specs.command("list")
+@click.option("--repo", help="Filter by repo-slug directory name.")
+def openspec_specs_list(repo: str | None) -> None:
+    """Print all standing specs as a JSON array."""
+    store = _openspec_store()
+    specs_list = store.list_specs(repo=repo)
+    click.echo(json.dumps(specs_list, indent=2))
+
+
+@specs.command("show")
+@click.argument("spec_name")
+@click.option("--repo", required=True, help="The repo-slug containing the spec.")
+@click.pass_context
+def openspec_specs_show(
+    ctx: click.Context,
+    spec_name: str,
+    repo: str,
+) -> None:
+    """Print one standing spec's content as JSON."""
+    store = _openspec_store()
+    result = store.show_spec(spec_name, repo=repo)
+    if result is None:
+        click.echo(
+            json.dumps({"error": "not found", "spec": spec_name, "repo": repo}),
+            err=True,
+        )
+        ctx.exit(1)
+    click.echo(json.dumps(result, indent=2))
