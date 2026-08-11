@@ -1,0 +1,4 @@
+worktree: /tmp/fake-worktrees/alpha-repo
+branch: feature/add-auth-flow
+date: 2026-03-15
+change: add-auth-flow

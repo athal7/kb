@@ -1,0 +1,4 @@
+worktree: /tmp/fake-worktrees/beta-project
+branch: refactor/api-v2
+date: 2026-02-10
+change: refactor-api
