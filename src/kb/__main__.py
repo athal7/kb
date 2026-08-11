@@ -33,6 +33,7 @@ from kb.core.actionitems import (
 )
 from kb.core.index import VaultIndex
 from kb.core.models import Person, Product, Project
+from kb.core.openspec import AmbiguousChangeError, OpenSpecStore
 from kb.platform.eventkit_services import EventKitCalendarService, EventKitRemindersService
 from kb.plugin_config import default_config_path, load_config
 from kb.plugin_loader import build_pane_registry, discover_plugins
@@ -460,19 +461,9 @@ def journal_append(
     click.echo(json.dumps(success_resp, indent=2))
 
 
-def main() -> None:
-    cli()
-
-
-if __name__ == "__main__":
-    main()
-
-
 # ---------------------------------------------------------------------------
 # openspec — query archived OpenSpec changes and standing specs
 # ---------------------------------------------------------------------------
-
-from kb.core.openspec import OpenSpecStore
 
 
 def _validate_date_param(
@@ -547,7 +538,20 @@ def openspec_show(
 ) -> None:
     """Print one change's metadata and design.md as JSON."""
     store = _openspec_store()
-    result = store.show_archive(change_name, repo=repo)
+    try:
+        result = store.show_archive(change_name, repo=repo)
+    except AmbiguousChangeError as exc:
+        click.echo(
+            json.dumps(
+                {
+                    "error": "ambiguous",
+                    "change": exc.change_name,
+                    "repos": [c["meta"]["repo"] for c in exc.candidates],
+                }
+            ),
+            err=True,
+        )
+        ctx.exit(1)
     if result is None:
         click.echo(
             json.dumps({"error": "not found", "change": change_name}),
@@ -590,3 +594,11 @@ def openspec_specs_show(
         )
         ctx.exit(1)
     click.echo(json.dumps(result, indent=2))
+
+
+def main() -> None:
+    cli()
+
+
+if __name__ == "__main__":
+    main()
