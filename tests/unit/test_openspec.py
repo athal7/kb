@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 from kb.core.openspec import (
+    AmbiguousChangeError,
     OpenSpecStore,
     parse_kb_meta,
     read_design_md,
@@ -192,9 +193,9 @@ class DescribeOpenSpecStoreShowArchive:
     def setup_method(self):
         self.store = OpenSpecStore(FIXTURES)
 
-    def it_returns_none_for_ambiguous_change_name(self):
-        result = self.store.show_archive("add-auth-flow")
-        assert result is None
+    def it_raises_ambiguous_change_error_for_ambiguous_change_name(self):
+        with pytest.raises(AmbiguousChangeError):
+            self.store.show_archive("add-auth-flow")
 
     def it_finds_archive_by_change_name_with_repo_scope(self):
         result = self.store.show_archive("add-auth-flow", repo="alpha-repo")

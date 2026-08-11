@@ -159,7 +159,9 @@ class DescribeOpenspecShow:
         result = CliRunner().invoke(cli, ["openspec", "show", "add-auth-flow"])
 
         assert result.exit_code != 0
-        assert "not found" in (result.output + str(result.exception)).lower()
+        error_data = json.loads(result.output)
+        assert error_data["error"] == "ambiguous"
+        assert error_data["change"] == "add-auth-flow"
 
     def it_prints_archive_from_other_repo(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
