@@ -26,7 +26,7 @@ class DescribeOpenspecList:
         assert result.exit_code == 0
         archives = json.loads(result.output)
         assert isinstance(archives, list)
-        assert len(archives) == 3
+        assert len(archives) == 5
 
         # Check structure
         for entry in archives:
@@ -55,8 +55,15 @@ class DescribeOpenspecList:
 
         assert result.exit_code == 0
         archives = json.loads(result.output)
-        assert len(archives) == 2
+        assert len(archives) == 3
         assert all(a["repo"] == "alpha-repo" for a in archives)
+
+        result = CliRunner().invoke(cli, ["openspec", "list", "--repo", "beta-project"])
+
+        assert result.exit_code == 0
+        archives = json.loads(result.output)
+        assert len(archives) == 2
+        assert all(a["repo"] == "beta-project" for a in archives)
 
     def it_filters_by_date_range(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
@@ -102,13 +109,37 @@ class DescribeOpenspecList:
         assert result.exit_code == 0
         assert json.loads(result.output) == []
 
+    def it_rejects_invalid_from_date(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(OPENSPEC_FIXTURES))
+
+        result = CliRunner().invoke(cli, ["openspec", "list", "--from", "not-a-date"])
+
+        assert result.exit_code != 0
+
+    def it_rejects_invalid_to_date(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(OPENSPEC_FIXTURES))
+
+        result = CliRunner().invoke(cli, ["openspec", "list", "--to", "not-a-date"])
+
+        assert result.exit_code != 0
+
+    def it_rejects_malformed_date(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(OPENSPEC_FIXTURES))
+
+        result = CliRunner().invoke(cli, ["openspec", "list", "--from", "2026/01/01"])
+
+        assert result.exit_code != 0
+
 
 class DescribeOpenspecShow:
     def it_prints_archive_metadata_and_design_as_json(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
         monkeypatch.setenv("KB_OPENSPEC_ROOT", str(OPENSPEC_FIXTURES))
 
-        result = CliRunner().invoke(cli, ["openspec", "show", "add-auth-flow"])
+        result = CliRunner().invoke(cli, ["openspec", "show", "add-auth-flow", "--repo", "alpha-repo"])
 
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -117,6 +148,15 @@ class DescribeOpenspecShow:
         assert data["meta"]["change"] == "add-auth-flow"
         assert data["meta"]["repo"] == "alpha-repo"
         assert "Add Authentication Flow" in data["design"]
+
+    def it_exits_non_zero_for_ambiguous_change_name(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(OPENSPEC_FIXTURES))
+
+        result = CliRunner().invoke(cli, ["openspec", "show", "add-auth-flow"])
+
+        assert result.exit_code != 0
+        assert "not found" in (result.output + str(result.exception)).lower()
 
     def it_prints_archive_from_other_repo(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date
 from pathlib import Path
 
 import click
@@ -474,6 +475,21 @@ if __name__ == "__main__":
 from kb.core.openspec import OpenSpecStore
 
 
+def _validate_date_param(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> str | None:
+    """Click callback that validates --from/--to are valid YYYY-MM-DD strings."""
+    if value is None:
+        return None
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise click.BadParameter(
+            "must be in YYYY-MM-DD format", ctx=ctx, param=param
+        ) from exc
+    return value
+
+
 def _openspec_store() -> OpenSpecStore:
     """Resolve the OpenSpec store root and return a store instance.
 
@@ -499,12 +515,14 @@ def openspec() -> None:
     "--from",
     "from_date",
     default=None,
+    callback=_validate_date_param,
     help="Start date filter (YYYY-MM-DD, inclusive).",
 )
 @click.option(
     "--to",
     "to_date",
     default=None,
+    callback=_validate_date_param,
     help="End date filter (YYYY-MM-DD, inclusive).",
 )
 def openspec_list(

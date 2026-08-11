@@ -113,6 +113,16 @@ class OpenSpecStore:
         """
         results: list[dict] = []
 
+        # Parse date bounds once, up front
+        from_d: date | None = None
+        to_d: date | None = None
+        if from_date:
+            from_d = date.fromisoformat(from_date)
+        if to_date:
+            to_d = date.fromisoformat(to_date)
+
+        has_date_filter = from_d is not None or to_d is not None
+
         repos = [repo] if repo else self.repo_slugs()
         for slug in repos:
             repo_dir = self._root / slug
@@ -131,29 +141,28 @@ class OpenSpecStore:
                 if meta is None:
                     continue
 
-                # Apply date filter
                 entry_date = meta.get("date")
-                if entry_date:
+
+                if has_date_filter:
+                    # With a date filter, entries without a parseable date are excluded
+                    if not entry_date:
+                        continue
                     try:
                         d = date.fromisoformat(entry_date)
                     except ValueError:
                         continue
 
-                    if from_date:
+                    if from_d and d < from_d:
+                        continue
+                    if to_d and d > to_d:
+                        continue
+                else:
+                    # No date filter — try to parse for sorting, but don't exclude
+                    if entry_date:
                         try:
-                            from_d = date.fromisoformat(from_date)
+                            date.fromisoformat(entry_date)
                         except ValueError:
-                            continue
-                        if d < from_d:
-                            continue
-
-                    if to_date:
-                        try:
-                            to_d = date.fromisoformat(to_date)
-                        except ValueError:
-                            continue
-                        if d > to_d:
-                            continue
+                            pass  # keep entry, sort will handle it
 
                 results.append({
                     "worktree": meta.get("worktree", ""),

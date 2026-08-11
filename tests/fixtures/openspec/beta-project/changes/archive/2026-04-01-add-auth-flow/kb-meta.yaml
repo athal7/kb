@@ -1,0 +1,4 @@
+worktree: /tmp/fake-worktrees/beta-project
+branch: feature/add-auth-flow
+date: 2026-04-01
+change: add-auth-flow

@@ -80,7 +80,7 @@ class DescribeOpenSpecStore:
 
     def it_lists_all_archives(self):
         archives = self.store.list_archives()
-        assert len(archives) == 3
+        assert len(archives) == 5
 
         # Check structure
         for entry in archives:
@@ -98,11 +98,11 @@ class DescribeOpenSpecStore:
 
     def it_filters_archives_by_repo(self):
         alpha_archives = self.store.list_archives(repo="alpha-repo")
-        assert len(alpha_archives) == 2
+        assert len(alpha_archives) == 3
         assert all(a["repo"] == "alpha-repo" for a in alpha_archives)
 
         beta_archives = self.store.list_archives(repo="beta-project")
-        assert len(beta_archives) == 1
+        assert len(beta_archives) == 2
         assert all(a["repo"] == "beta-project" for a in beta_archives)
 
     def it_filters_archives_by_date_range(self):
@@ -132,6 +132,57 @@ class DescribeOpenSpecStore:
         result = self.store.list_archives(repo="nonexistent", from_date="2026-01-01", to_date="2026-12-31")
         assert result == []
 
+    def it_excludes_entry_with_missing_date_when_from_filter_applied(self):
+        result = self.store.list_archives(from_date="2026-01-01")
+        no_date_entries = [e for e in result if e["change"] == "no-date-change"]
+        assert len(no_date_entries) == 0
+
+    def it_excludes_entry_with_missing_date_when_to_filter_applied(self):
+        result = self.store.list_archives(to_date="2026-12-31")
+        no_date_entries = [e for e in result if e["change"] == "no-date-change"]
+        assert len(no_date_entries) == 0
+
+    def it_excludes_entry_with_missing_date_when_both_filters_applied(self):
+        result = self.store.list_archives(from_date="2026-01-01", to_date="2026-12-31")
+        no_date_entries = [e for e in result if e["change"] == "no-date-change"]
+        assert len(no_date_entries) == 0
+
+    def it_includes_entry_with_missing_date_when_no_date_filter(self):
+        result = self.store.list_archives()
+        no_date_entries = [e for e in result if e["change"] == "no-date-change"]
+        assert len(no_date_entries) == 1
+        assert no_date_entries[0]["date"] == ""
+
+    def it_excludes_entry_with_empty_date_when_from_filter_applied(self, tmp_path):
+        store = OpenSpecStore(tmp_path)
+        repo_dir = tmp_path / "test-repo" / "changes" / "archive"
+        repo_dir.mkdir(parents=True)
+        entry_dir = repo_dir / "2026-01-01-empty-date"
+        entry_dir.mkdir()
+        (entry_dir / "kb-meta.yaml").write_text(
+            "worktree: /tmp/w\nbranch: main\ndate: ''\nchange: empty-date\n",
+            encoding="utf-8",
+        )
+        (entry_dir / "design.md").write_text("# Empty date", encoding="utf-8")
+        result = store.list_archives(from_date="2026-01-01")
+        empty_date_entries = [e for e in result if e["change"] == "empty-date"]
+        assert len(empty_date_entries) == 0
+
+    def it_excludes_entry_with_unparseable_date_when_from_filter_applied(self, tmp_path):
+        store = OpenSpecStore(tmp_path)
+        repo_dir = tmp_path / "test-repo" / "changes" / "archive"
+        repo_dir.mkdir(parents=True)
+        entry_dir = repo_dir / "2026-01-01-bad-date"
+        entry_dir.mkdir()
+        (entry_dir / "kb-meta.yaml").write_text(
+            "worktree: /tmp/w\nbranch: main\ndate: not-a-date\nchange: bad-date\n",
+            encoding="utf-8",
+        )
+        (entry_dir / "design.md").write_text("# Bad date", encoding="utf-8")
+        result = store.list_archives(from_date="2026-01-01")
+        bad_date_entries = [e for e in result if e["change"] == "bad-date"]
+        assert len(bad_date_entries) == 0
+
 
 # ---------------------------------------------------------------------------
 # OpenSpecStore — show archive
@@ -141,8 +192,12 @@ class DescribeOpenSpecStoreShowArchive:
     def setup_method(self):
         self.store = OpenSpecStore(FIXTURES)
 
-    def it_finds_archive_by_change_name(self):
+    def it_returns_none_for_ambiguous_change_name(self):
         result = self.store.show_archive("add-auth-flow")
+        assert result is None
+
+    def it_finds_archive_by_change_name_with_repo_scope(self):
+        result = self.store.show_archive("add-auth-flow", repo="alpha-repo")
         assert result is not None
         assert result["meta"]["change"] == "add-auth-flow"
         assert result["meta"]["repo"] == "alpha-repo"
@@ -164,7 +219,7 @@ class DescribeOpenSpecStoreShowArchive:
         assert result["meta"]["repo"] == "alpha-repo"
 
     def it_includes_design_content(self):
-        result = self.store.show_archive("add-auth-flow")
+        result = self.store.show_archive("add-auth-flow", repo="alpha-repo")
         assert result["design"] is not None
         assert "## Context" in result["design"]
         assert "## Decisions" in result["design"]
