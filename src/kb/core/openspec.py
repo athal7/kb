@@ -11,7 +11,6 @@ This module is read-only — it never writes to the store.
 
 from __future__ import annotations
 
-import os
 from datetime import date
 from pathlib import Path
 
@@ -33,6 +32,24 @@ STATINGSPECS_DIR = "specs"
 
 
 # ---------------------------------------------------------------------------
+# Exceptions
+# ---------------------------------------------------------------------------
+
+
+class AmbiguousChangeError(Exception):
+    """Raised when multiple archived changes share the same name."""
+
+    def __init__(self, change_name: str, candidates: list[dict]) -> None:
+        super().__init__(
+            f"Ambiguous change name '{change_name}': "
+            f"{len(candidates)} matches found. "
+            "Specify --repo to disambiguate."
+        )
+        self.change_name = change_name
+        self.candidates = candidates
+
+
+# ---------------------------------------------------------------------------
 # Low-level helpers
 # ---------------------------------------------------------------------------
 
@@ -49,7 +66,7 @@ def parse_kb_meta(path: Path) -> dict[str, str] | None:
         if not isinstance(data, dict):
             return None
         return {k: str(v) for k, v in data.items()}
-    except Exception:
+    except (yaml.YAMLError, OSError):
         return None
 
 
@@ -62,7 +79,7 @@ def read_design_md(path: Path) -> str | None:
         return None
     try:
         return path.read_text(encoding="utf-8")
-    except Exception:
+    except OSError:
         return None
 
 
@@ -188,8 +205,8 @@ class OpenSpecStore:
 
         Looks up by the ``change`` field in *kb-meta.yaml*.  If *repo* is
         provided the search is scoped to that repo; otherwise all repos are
-        searched.  When multiple matches exist without a repo filter, returns
-        ``None`` (ambiguous).
+        searched.  Raises :class:`AmbiguousChangeError` when multiple matches
+        exist without a repo filter.
         """
         candidates: list[dict] = []
 
@@ -229,8 +246,7 @@ class OpenSpecStore:
         if len(candidates) == 1:
             return candidates[0]
         if len(candidates) > 1:
-            # Ambiguous — caller should provide --repo
-            return None
+            raise AmbiguousChangeError(change_name, candidates)
         return None
 
     # -- standing specs -----------------------------------------------------
@@ -287,7 +303,7 @@ class OpenSpecStore:
 
         try:
             content = spec_file.read_text(encoding="utf-8")
-        except Exception:
+        except OSError:
             return None
 
         return {
