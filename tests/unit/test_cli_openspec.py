@@ -116,6 +116,7 @@ class DescribeOpenspecList:
         result = CliRunner().invoke(cli, ["openspec", "list", "--from", "not-a-date"])
 
         assert result.exit_code != 0
+        assert "must be in YYYY-MM-DD format" in result.output
 
     def it_rejects_invalid_to_date(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
@@ -124,6 +125,7 @@ class DescribeOpenspecList:
         result = CliRunner().invoke(cli, ["openspec", "list", "--to", "not-a-date"])
 
         assert result.exit_code != 0
+        assert "must be in YYYY-MM-DD format" in result.output
 
     def it_rejects_malformed_date(self, monkeypatch):
         monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
@@ -132,6 +134,7 @@ class DescribeOpenspecList:
         result = CliRunner().invoke(cli, ["openspec", "list", "--from", "2026/01/01"])
 
         assert result.exit_code != 0
+        assert "must be in YYYY-MM-DD format" in result.output
 
 
 class DescribeOpenspecShow:
