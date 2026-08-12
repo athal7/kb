@@ -140,6 +140,21 @@ def _product_to_dict(product: Product) -> dict:
     }
 
 
+def _validate_date_param(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> str | None:
+    """Click callback that validates --from/--to are valid YYYY-MM-DD strings."""
+    if value is None:
+        return None
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise click.BadParameter(
+            "must be in YYYY-MM-DD format", ctx=ctx, param=param
+        ) from exc
+    return value
+
+
 @click.group(invoke_without_command=True)
 @click.version_option(package_name="kb")
 @click.pass_context
@@ -460,6 +475,72 @@ def journal_append(
     }
     click.echo(json.dumps(success_resp, indent=2))
 
+
+@journal.command("list")
+@click.option(
+    "--from",
+    "from_date",
+    default=None,
+    callback=_validate_date_param,
+    help="Start date filter (YYYY-MM-DD, inclusive).",
+)
+@click.option(
+    "--to",
+    "to_date",
+    default=None,
+    callback=_validate_date_param,
+    help="End date filter (YYYY-MM-DD, inclusive).",
+)
+def journal_list(from_date: str | None, to_date: str | None) -> None:
+    """Print every journal entry in the vault as a JSON array, optionally filtered by date."""
+    index = _build_index()
+    from_d = date.fromisoformat(from_date) if from_date else None
+    to_d = date.fromisoformat(to_date) if to_date else None
+    entries = index.journal_entries(start=from_d, end=to_d)
+    results = [
+        {
+            "date": entry.date,
+            "file": entry.file,
+        }
+        for entry in entries
+    ]
+    click.echo(json.dumps(results, indent=2))
+
+
+@journal.command("show")
+@click.argument("date_str", metavar="DATE", callback=_validate_date_param)
+@click.pass_context
+def journal_show(ctx: click.Context, date_str: str) -> None:
+    """Print one journal entry's sections/content as JSON, looked up by date (YYYY-MM-DD)."""
+    index = _build_index()
+    d = date.fromisoformat(date_str)
+    entries = index.journal_entries(start=d, end=d)
+    if not entries:
+        click.echo(json.dumps({"error": "not found", "date": date_str}), err=True)
+        ctx.exit(1)
+
+    entry = entries[0]
+    result = {
+        "date": entry.date,
+        "file": entry.file,
+        "sections": [
+            {
+                "heading": s.heading,
+                "level": s.level,
+                "lines": s.lines,
+            }
+            for s in entry.sections
+        ]
+    }
+    click.echo(json.dumps(result, indent=2))
+
+
+def main() -> None:
+    cli()
+
+
+if __name__ == "__main__":
+    main()
 
 # ---------------------------------------------------------------------------
 # openspec — query archived OpenSpec changes and standing specs

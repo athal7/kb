@@ -424,3 +424,104 @@ class DescribeJournalAppend:
         err_data = json.loads(result.stderr)
         assert err_data["ok"] is False
         assert err_data["error"]["code"] == "validation.invalid_date"
+
+
+class DescribeJournalList:
+    def it_prints_all_journal_entries_as_json_array(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["journal", "list"])
+
+        assert result.exit_code == 0
+        entries = json.loads(result.output)
+        assert isinstance(entries, list)
+        assert len(entries) == 2
+        assert entries[0]["date"] == "2026-07-12"
+        assert entries[0]["file"] == "journal/2026-07-12.md"
+        assert entries[1]["date"] == "2026-07-13"
+        assert entries[1]["file"] == "journal/2026-07-13.md"
+
+    def it_filters_by_from_date(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["journal", "list", "--from", "2026-07-13"])
+
+        assert result.exit_code == 0
+        entries = json.loads(result.output)
+        assert len(entries) == 1
+        assert entries[0]["date"] == "2026-07-13"
+
+    def it_filters_by_to_date(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["journal", "list", "--to", "2026-07-12"])
+
+        assert result.exit_code == 0
+        entries = json.loads(result.output)
+        assert len(entries) == 1
+        assert entries[0]["date"] == "2026-07-12"
+
+    def it_filters_by_date_range(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(
+            cli, ["journal", "list", "--from", "2026-07-12", "--to", "2026-07-12"]
+        )
+
+        assert result.exit_code == 0
+        entries = json.loads(result.output)
+        assert len(entries) == 1
+        assert entries[0]["date"] == "2026-07-12"
+
+    def it_rejects_invalid_from_date(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["journal", "list", "--from", "not-a-date"])
+
+        assert result.exit_code != 0
+        assert "must be in YYYY-MM-DD format" in result.output
+
+    def it_rejects_invalid_to_date(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["journal", "list", "--to", "not-a-date"])
+
+        assert result.exit_code != 0
+        assert "must be in YYYY-MM-DD format" in result.output
+
+
+class DescribeJournalShow:
+    def it_prints_journal_entry_as_json(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["journal", "show", "2026-07-12"])
+
+        assert result.exit_code == 0
+        entry = json.loads(result.output)
+        assert entry["date"] == "2026-07-12"
+        assert entry["file"] == "journal/2026-07-12.md"
+        assert isinstance(entry["sections"], list)
+        assert len(entry["sections"]) == 1
+        assert entry["sections"][0]["heading"] == "Slack Context"
+        assert entry["sections"][0]["level"] == 2
+        assert entry["sections"][0]["lines"] == [
+            "- Discussion about Anvil access in [[Lumen]] channel"
+        ]
+
+    def it_exits_non_zero_for_nonexistent_date(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["journal", "show", "2099-01-01"])
+
+        assert result.exit_code != 0
+        err_data = json.loads(result.stderr)
+        assert err_data["error"] == "not found"
+        assert err_data["date"] == "2099-01-01"
+
+    def it_rejects_invalid_date_format(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["journal", "show", "invalid-date"])
+
+        assert result.exit_code != 0
+        assert "must be in YYYY-MM-DD format" in result.output
