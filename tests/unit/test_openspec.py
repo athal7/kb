@@ -374,3 +374,85 @@ class DescribeOpenSpecStoreImport:
             OpenSpecStore(store_root).import_archive(record)
 
         assert not store_root.exists()
+
+    def it_rejects_date_only_approval_times(self, tmp_path):
+        repo = tmp_path / "example-repo"
+        repo.mkdir()
+        _run_git("init", "--initial-branch=main", cwd=repo)
+        record = _approved_record(repo)
+        record["approval_time"] = "2026-08-18"
+
+        with pytest.raises(OpenSpecImportError, match="ISO-8601 timestamp"):
+            OpenSpecStore(tmp_path / "openspec").import_archive(record)
+
+    def it_rejects_a_plan_without_an_initial_h1(self, tmp_path):
+        repo = tmp_path / "example-repo"
+        repo.mkdir()
+        _run_git("init", "--initial-branch=main", cwd=repo)
+        record = _approved_record(repo)
+        record["plan_content"] = "Context before the title\n# Import Approved Plan"
+        record["plan_sha256"] = hashlib.sha256(
+            record["plan_content"].encode("utf-8")
+        ).hexdigest()
+
+        with pytest.raises(OpenSpecImportError, match="begin with a Markdown H1"):
+            OpenSpecStore(tmp_path / "openspec").import_archive(record)
+
+    def it_reuses_an_archive_created_by_a_concurrent_import(
+        self, monkeypatch, tmp_path
+    ):
+        repo = tmp_path / "example-repo"
+        repo.mkdir()
+        _run_git("init", "--initial-branch=main", cwd=repo)
+        store_root = tmp_path / "openspec"
+        store = OpenSpecStore(store_root)
+        record = _approved_record(repo)
+        archive_path = (
+            store_root
+            / "example-repo"
+            / "changes"
+            / "archive"
+            / "2026-08-18-import-approved-plan"
+        )
+        original_rename = Path.rename
+
+        def concurrent_rename(source, target):
+            if source.name.startswith(".import-") and Path(target) == archive_path:
+                archive_path.mkdir()
+                (archive_path / "design.md").write_text(
+                    record["plan_content"], encoding="utf-8"
+                )
+                (archive_path / "kb-meta.yaml").write_text(
+                    yaml.safe_dump(
+                        {
+                            "session_id": record["session_id"],
+                            "plan_sha256": record["plan_sha256"],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                raise FileExistsError
+            return original_rename(source, target)
+
+        monkeypatch.setattr(Path, "rename", concurrent_rename)
+
+        result = store.import_archive(record)
+
+        assert result["path"] == str(archive_path)
+        assert result["created"] is False
+
+    def it_maps_archive_write_failures_to_import_errors(self, monkeypatch, tmp_path):
+        repo = tmp_path / "example-repo"
+        repo.mkdir()
+        _run_git("init", "--initial-branch=main", cwd=repo)
+        original_write_text = Path.write_text
+
+        def failing_design_write(path, *args, **kwargs):
+            if path.name == "design.md":
+                raise OSError("read-only filesystem")
+            return original_write_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", failing_design_write)
+
+        with pytest.raises(OpenSpecImportError, match="could not create archive"):
+            OpenSpecStore(tmp_path / "openspec").import_archive(_approved_record(repo))

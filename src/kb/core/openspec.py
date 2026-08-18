@@ -120,8 +120,17 @@ def _required_import_fields(record: object) -> dict[str, str]:
 
 
 def _approved_plan_date(approval_time: str) -> str:
+    if "T" not in approval_time:
+        raise OpenSpecImportError(
+            "invalid_approval_time", "approval_time must be an ISO-8601 timestamp"
+        )
     try:
-        return datetime.fromisoformat(approval_time.replace("Z", "+00:00")).date().isoformat()
+        normalized_time = (
+            f"{approval_time[:-1]}+00:00"
+            if approval_time.endswith("Z")
+            else approval_time
+        )
+        return datetime.fromisoformat(normalized_time).date().isoformat()
     except ValueError as exc:
         raise OpenSpecImportError(
             "invalid_approval_time", "approval_time must be an ISO-8601 timestamp"
@@ -129,7 +138,8 @@ def _approved_plan_date(approval_time: str) -> str:
 
 
 def _change_name(plan_content: str) -> str:
-    match = re.search(r"^#\s+(.+?)\s*#*\s*$", plan_content, flags=re.MULTILINE)
+    first_line = plan_content.split("\n", 1)[0].removesuffix("\r")
+    match = re.fullmatch(r"#\s+(.+?)\s*#*", first_line)
     if match is None:
         raise OpenSpecImportError(
             "invalid_plan_content", "plan_content must begin with a Markdown H1"
@@ -216,6 +226,23 @@ class OpenSpecStore:
             "created": created,
         }
 
+    def _existing_import(
+        self, archive_dir: Path, session_id: str, digest: str, repo: str
+    ) -> dict[str, object] | None:
+        if not archive_dir.is_dir():
+            return None
+        for entry_path in archive_dir.iterdir():
+            if not entry_path.is_dir():
+                continue
+            meta = parse_kb_meta(entry_path / KB_META_FILENAME)
+            if (
+                meta is not None
+                and meta.get("session_id") == session_id
+                and meta.get("plan_sha256", "").lower() == digest
+            ):
+                return self._import_result(entry_path, meta, repo, created=False)
+        return None
+
     def import_archive(self, record: object) -> dict[str, object]:
         """Persist one approved plan record and return its archive reference."""
         values = _required_import_fields(record)
@@ -236,56 +263,60 @@ class OpenSpecStore:
         change = _change_name(values["plan_content"])
         worktree, repo, branch = _git_info(values["worktree"])
         archive_dir = self._root / repo / ARCHIVES_DIR / ARCHIVE_SUBDIR
-
-        if archive_dir.is_dir():
-            for entry_path in archive_dir.iterdir():
-                if not entry_path.is_dir():
-                    continue
-                meta = parse_kb_meta(entry_path / KB_META_FILENAME)
-                if (
-                    meta is not None
-                    and meta.get("session_id") == values["session_id"]
-                    and meta.get("plan_sha256", "").lower() == digest
-                ):
-                    return self._import_result(entry_path, meta, repo, created=False)
-
         entry_path = archive_dir / f"{approval_date}-{change}"
-        if entry_path.exists():
-            raise OpenSpecImportError(
-                "archive_conflict",
-                f"archive already exists at {entry_path}",
-            )
 
-        metadata = {
-            "worktree": str(worktree),
-            "branch": branch,
-            "date": approval_date,
-            "change": change,
-            "repo": repo,
-            "session_id": values["session_id"],
-            "approval_time": values["approval_time"],
-            "plan_sha256": digest,
-            "verified_implementation_evidence": values[
-                "verified_implementation_evidence"
-            ],
-        }
-        archive_dir.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix=".import-", dir=archive_dir) as temp_dir:
-            temp_path = Path(temp_dir)
-            (temp_path / DESIGN_FILENAME).write_text(
-                values["plan_content"], encoding="utf-8"
+        try:
+            existing = self._existing_import(
+                archive_dir, values["session_id"], digest, repo
             )
-            (temp_path / KB_META_FILENAME).write_text(
-                yaml.safe_dump(metadata, allow_unicode=True, sort_keys=False),
-                encoding="utf-8",
-            )
-            try:
-                temp_path.rename(entry_path)
-            except OSError as exc:
+            if existing is not None:
+                return existing
+            if entry_path.exists():
                 raise OpenSpecImportError(
                     "archive_conflict",
-                    f"could not create archive at {entry_path}",
-                ) from exc
+                    f"archive already exists at {entry_path}",
+                )
+
+            metadata = {
+                "worktree": str(worktree),
+                "branch": branch,
+                "date": approval_date,
+                "change": change,
+                "repo": repo,
+                "session_id": values["session_id"],
+                "approval_time": values["approval_time"],
+                "plan_sha256": digest,
+                "verified_implementation_evidence": values[
+                    "verified_implementation_evidence"
+                ],
+            }
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(
+                prefix=".import-", dir=archive_dir
+            ) as temp_dir:
+                temp_path = Path(temp_dir)
+                (temp_path / DESIGN_FILENAME).write_text(
+                    values["plan_content"], encoding="utf-8"
+                )
+                (temp_path / KB_META_FILENAME).write_text(
+                    yaml.safe_dump(metadata, allow_unicode=True, sort_keys=False),
+                    encoding="utf-8",
+                )
+                temp_path.rename(entry_path)
+        except OpenSpecImportError:
+            raise
+        except OSError as exc:
+            meta = parse_kb_meta(entry_path / KB_META_FILENAME)
+            if (
+                meta is not None
+                and meta.get("session_id") == values["session_id"]
+                and meta.get("plan_sha256", "").lower() == digest
+            ):
+                return self._import_result(entry_path, meta, repo, created=False)
+            raise OpenSpecImportError(
+                "archive_write_failed",
+                f"could not create archive at {entry_path}",
+            ) from exc
 
         return self._import_result(entry_path, metadata, repo, created=True)
 
