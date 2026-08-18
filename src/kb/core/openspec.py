@@ -6,13 +6,17 @@ Reads archived OpenSpec changes and standing specs from the store at
 and a ``design.md`` document.  Standing specs live in
 ``specs/<spec-name>/spec.md`` per repo-slug.
 
-This module is read-only — it never writes to the store.
+This module reads and imports durable OpenSpec archives.
 """
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
+import hashlib
 from pathlib import Path
+import re
+import subprocess
+import tempfile
 
 import yaml
 
@@ -49,6 +53,15 @@ class AmbiguousChangeError(Exception):
         self.candidates = candidates
 
 
+class OpenSpecImportError(Exception):
+    """Raised when an approved plan record cannot be imported."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
 # ---------------------------------------------------------------------------
 # Low-level helpers
 # ---------------------------------------------------------------------------
@@ -83,12 +96,98 @@ def read_design_md(path: Path) -> str | None:
         return None
 
 
+def _required_import_fields(record: object) -> dict[str, str]:
+    if not isinstance(record, dict):
+        raise OpenSpecImportError("invalid_record", "record must be a JSON object")
+
+    fields = (
+        "session_id",
+        "worktree",
+        "approval_time",
+        "plan_content",
+        "plan_sha256",
+        "verified_implementation_evidence",
+    )
+    values: dict[str, str] = {}
+    for field in fields:
+        value = record.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise OpenSpecImportError(
+                "invalid_record", f"{field} must be a non-empty string"
+            )
+        values[field] = value
+    return values
+
+
+def _approved_plan_date(approval_time: str) -> str:
+    try:
+        return datetime.fromisoformat(approval_time.replace("Z", "+00:00")).date().isoformat()
+    except ValueError as exc:
+        raise OpenSpecImportError(
+            "invalid_approval_time", "approval_time must be an ISO-8601 timestamp"
+        ) from exc
+
+
+def _change_name(plan_content: str) -> str:
+    match = re.search(r"^#\s+(.+?)\s*#*\s*$", plan_content, flags=re.MULTILINE)
+    if match is None:
+        raise OpenSpecImportError(
+            "invalid_plan_content", "plan_content must begin with a Markdown H1"
+        )
+    change = re.sub(r"[^a-z0-9]+", "-", match.group(1).lower()).strip("-")
+    if not change:
+        raise OpenSpecImportError(
+            "invalid_plan_content", "plan_content H1 must contain a usable change name"
+        )
+    return change
+
+
+def _git_info(worktree: str) -> tuple[Path, str, str]:
+    worktree_path = Path(worktree).expanduser().resolve()
+    if not worktree_path.is_dir():
+        raise OpenSpecImportError("invalid_worktree", "worktree must be an existing directory")
+
+    try:
+        common_dir = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(worktree_path),
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-common-dir",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        branch = subprocess.run(
+            ["git", "-C", str(worktree_path), "branch", "--show-current"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise OpenSpecImportError(
+            "invalid_worktree", "worktree must be inside a Git repository"
+        ) from exc
+
+    common_path = Path(common_dir)
+    repo_root = common_path.parent
+    slug = repo_root.name.removesuffix(".git")
+    if not slug:
+        raise OpenSpecImportError(
+            "invalid_worktree", "Git repository does not have a usable directory name"
+        )
+    return worktree_path, slug, branch
+
+
 # ---------------------------------------------------------------------------
 # OpenSpecStore — high-level query API
 # ---------------------------------------------------------------------------
 
 class OpenSpecStore:
-    """Read-only accessor for the OpenSpec durable archive.
+    """Accessor for the OpenSpec durable archive.
 
     The store root is resolved from ``KB_ROOT`` (or the ``KB_OPENSPEC_ROOT``
     environment variable, for tests) by appending ``openspec`` to the parent
@@ -101,6 +200,94 @@ class OpenSpecStore:
         else:
             kb_root = resolve_kb_root(None, validate=False)
             self._root = kb_root / OPENSPEC_SUBDIR
+
+    def _import_result(
+        self, entry_path: Path, meta: dict[str, str], repo: str, created: bool
+    ) -> dict[str, object]:
+        return {
+            "worktree": meta.get("worktree", ""),
+            "branch": meta.get("branch", ""),
+            "date": meta.get("date", ""),
+            "change": meta.get("change", ""),
+            "repo": repo,
+            "path": str(entry_path),
+            "session_id": meta.get("session_id", ""),
+            "plan_sha256": meta.get("plan_sha256", ""),
+            "created": created,
+        }
+
+    def import_archive(self, record: object) -> dict[str, object]:
+        """Persist one approved plan record and return its archive reference."""
+        values = _required_import_fields(record)
+        digest = values["plan_sha256"].lower()
+        if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise OpenSpecImportError(
+                "invalid_plan_sha256", "plan_sha256 must be a SHA-256 hexadecimal digest"
+            )
+        computed_digest = hashlib.sha256(
+            values["plan_content"].encode("utf-8")
+        ).hexdigest()
+        if digest != computed_digest:
+            raise OpenSpecImportError(
+                "plan_sha256_mismatch", "plan_sha256 does not match plan_content"
+            )
+
+        approval_date = _approved_plan_date(values["approval_time"])
+        change = _change_name(values["plan_content"])
+        worktree, repo, branch = _git_info(values["worktree"])
+        archive_dir = self._root / repo / ARCHIVES_DIR / ARCHIVE_SUBDIR
+
+        if archive_dir.is_dir():
+            for entry_path in archive_dir.iterdir():
+                if not entry_path.is_dir():
+                    continue
+                meta = parse_kb_meta(entry_path / KB_META_FILENAME)
+                if (
+                    meta is not None
+                    and meta.get("session_id") == values["session_id"]
+                    and meta.get("plan_sha256", "").lower() == digest
+                ):
+                    return self._import_result(entry_path, meta, repo, created=False)
+
+        entry_path = archive_dir / f"{approval_date}-{change}"
+        if entry_path.exists():
+            raise OpenSpecImportError(
+                "archive_conflict",
+                f"archive already exists at {entry_path}",
+            )
+
+        metadata = {
+            "worktree": str(worktree),
+            "branch": branch,
+            "date": approval_date,
+            "change": change,
+            "repo": repo,
+            "session_id": values["session_id"],
+            "approval_time": values["approval_time"],
+            "plan_sha256": digest,
+            "verified_implementation_evidence": values[
+                "verified_implementation_evidence"
+            ],
+        }
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".import-", dir=archive_dir) as temp_dir:
+            temp_path = Path(temp_dir)
+            (temp_path / DESIGN_FILENAME).write_text(
+                values["plan_content"], encoding="utf-8"
+            )
+            (temp_path / KB_META_FILENAME).write_text(
+                yaml.safe_dump(metadata, allow_unicode=True, sort_keys=False),
+                encoding="utf-8",
+            )
+            try:
+                temp_path.rename(entry_path)
+            except OSError as exc:
+                raise OpenSpecImportError(
+                    "archive_conflict",
+                    f"could not create archive at {entry_path}",
+                ) from exc
+
+        return self._import_result(entry_path, metadata, repo, created=True)
 
     # -- repo discovery -----------------------------------------------------
 

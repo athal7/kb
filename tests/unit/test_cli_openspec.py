@@ -6,7 +6,9 @@ data in tests/fixtures/openspec/.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -254,3 +256,50 @@ class DescribeOpenspecSpecsShow:
 
         assert result.exit_code != 0
         assert "not found" in (result.output + str(result.exception)).lower()
+
+
+def _initialize_git_repository(path: Path) -> None:
+    subprocess.run(
+        ["git", "init", "--initial-branch=main"],
+        cwd=path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+class DescribeOpenspecImport:
+    def it_imports_an_approved_plan_record(self, monkeypatch, tmp_path):
+        worktree = tmp_path / "example-repo"
+        worktree.mkdir()
+        _initialize_git_repository(worktree)
+        plan_content = "# Import CLI Plan\n\n## Context\nStore this plan."
+        record = {
+            "session_id": "session-cli",
+            "worktree": str(worktree),
+            "approval_time": "2026-08-18T10:30:00+00:00",
+            "plan_content": plan_content,
+            "plan_sha256": hashlib.sha256(plan_content.encode("utf-8")).hexdigest(),
+            "verified_implementation_evidence": "Focused tests passed.",
+        }
+        record_path = tmp_path / "record.json"
+        record_path.write_text(json.dumps(record), encoding="utf-8")
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(tmp_path / "openspec"))
+
+        result = CliRunner().invoke(cli, ["openspec", "import", str(record_path)])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["repo"] == "example-repo"
+        assert data["change"] == "import-cli-plan"
+        assert data["created"] is True
+
+    def it_returns_a_json_error_for_malformed_records(self, monkeypatch, tmp_path):
+        record_path = tmp_path / "record.json"
+        record_path.write_text("{", encoding="utf-8")
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(tmp_path / "openspec"))
+
+        result = CliRunner().invoke(cli, ["openspec", "import", str(record_path)])
+
+        assert result.exit_code != 0
+        assert json.loads(result.output)["error"]["code"] == "invalid_record"
