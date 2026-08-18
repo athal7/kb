@@ -88,6 +88,27 @@ class DescribePeopleList:
         assert result.exit_code == 0
         assert json.loads(result.output) == []
 
+    def it_prints_a_text_list_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "people", "list"])
+
+        assert result.exit_code == 0
+        assert "Name: Elena" in result.output
+        assert "Team: Design" in result.output
+        assert "Name: Marcus Webb" in result.output
+        assert "Title: Staff Software Engineer" in result.output
+
+    def it_uses_text_format_when_interactive_and_format_auto(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+        monkeypatch.setattr("click.testing._NamedTextIOWrapper.isatty", lambda self: True)
+
+        result = CliRunner().invoke(cli, ["--format", "auto", "people", "list"])
+
+        assert result.exit_code == 0
+        assert "Name: Elena" in result.output
+        assert "Team: Design" in result.output
+
 
 class DescribePeopleShow:
     def it_prints_the_matching_persons_record_as_json(self, monkeypatch):
@@ -127,6 +148,35 @@ class DescribePeopleShow:
 
         assert result.exit_code != 0
         assert "not found" in (result.output + str(result.exception))
+
+class DescribePeopleShowFormat:
+    def it_prints_the_matching_person_as_text_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "people", "show", "Marcus Webb"])
+
+        assert result.exit_code == 0
+        assert "Name: Marcus Webb" in result.output
+        assert "Title: Staff Software Engineer" in result.output
+        assert "Team: Engineering" in result.output
+        assert "Email: mwebb@example.com" in result.output
+
+    def it_uses_text_format_when_interactive_and_format_auto(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+        monkeypatch.setattr("click.testing._NamedTextIOWrapper.isatty", lambda self: True)
+
+        result = CliRunner().invoke(cli, ["--format", "auto", "people", "show", "Marcus Webb"])
+
+        assert result.exit_code == 0
+        assert "Name: Marcus Webb" in result.output
+
+    def it_prints_text_error_for_unknown_name_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "people", "show", "Nobody Real"])
+
+        assert result.exit_code != 0
+        assert "Error: person 'Nobody Real' not found" in result.output
 
 
 class DescribeProjectsList:

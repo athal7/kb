@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -118,6 +119,37 @@ def _person_to_dict(person: Person) -> dict:
     }
 
 
+def _get_format(ctx: click.Context) -> str:
+    """Determine the active output format.
+
+    Looks up the `--format` option from the root click context. If it's
+    'auto', checks if stdout is connected to an interactive TTY.
+    """
+    fmt = ctx.find_root().params.get("format", "auto")
+    if fmt == "auto":
+        is_tty = getattr(sys.stdout, "isatty", lambda: False)()
+        return "text" if is_tty else "json"
+    return fmt
+
+
+def _format_person_text(person_dict: dict) -> str:
+    """Format a person's details in a human-readable text block."""
+    lines = []
+    lines.append(f"Name: {person_dict['name']}")
+    if person_dict.get("title"):
+        lines.append(f"Title: {person_dict['title']}")
+    if person_dict.get("team"):
+        lines.append(f"Team: {person_dict['team']}")
+    if person_dict.get("email"):
+        lines.append(f"Email: {person_dict['email']}")
+    if person_dict.get("slack_id"):
+        lines.append(f"Slack ID: {person_dict['slack_id']}")
+    if person_dict.get("aliases"):
+        aliases_str = ", ".join(person_dict["aliases"])
+        lines.append(f"Aliases: {aliases_str}")
+    return "\n".join(lines)
+
+
 def _project_to_dict(project: Project) -> dict:
     return {
         "name": _entity_display_name(project),
@@ -157,8 +189,14 @@ def _validate_date_param(
 
 @click.group(invoke_without_command=True)
 @click.version_option(package_name="kb")
+@click.option(
+    "--format",
+    type=click.Choice(["json", "text", "auto"]),
+    default="auto",
+    help="Output format (json, text, or auto).",
+)
 @click.pass_context
-def cli(ctx: click.Context) -> None:
+def cli(ctx: click.Context, format: str) -> None:
     """Browse and manage your personal knowledge-base vault.
 
     Run with no subcommand to launch the interactive TUI dashboard.
@@ -173,25 +211,41 @@ def people() -> None:
 
 
 @people.command("list")
-def people_list() -> None:
-    """Print every person in the vault as a JSON array."""
+@click.pass_context
+def people_list(ctx: click.Context) -> None:
+    """Print every person in the vault."""
     index = _build_index()
-    click.echo(json.dumps([_person_to_dict(p) for p in index.all_people()], indent=2))
+    people_dicts = [_person_to_dict(p) for p in index.all_people()]
+    fmt = _get_format(ctx)
+    if fmt == "json":
+        click.echo(json.dumps(people_dicts, indent=2))
+    else:
+        output = "\n\n".join(_format_person_text(p) for p in people_dicts)
+        click.echo(output)
 
 
 @people.command("show")
 @click.argument("name")
 @click.pass_context
 def people_show(ctx: click.Context, name: str) -> None:
-    """Print one person's record as JSON, looked up by name or alias."""
+    """Print one person's record, looked up by name or alias."""
     index = _build_index()
     person = index.person(name)
+    fmt = _get_format(ctx)
     if person is None:
         # Keep stdout clean JSON-on-success; the error goes to stderr and the
         # exit code is the actual success/failure signal for scripts.
-        click.echo(json.dumps({"error": "not found", "name": name}), err=True)
+        if fmt == "json":
+            click.echo(json.dumps({"error": "not found", "name": name}), err=True)
+        else:
+            click.echo(f"Error: person '{name}' not found", err=True)
         ctx.exit(1)
-    click.echo(json.dumps(_person_to_dict(person), indent=2))
+
+    person_dict = _person_to_dict(person)
+    if fmt == "json":
+        click.echo(json.dumps(person_dict, indent=2))
+    else:
+        click.echo(_format_person_text(person_dict))
 
 
 @cli.group()
