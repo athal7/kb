@@ -6,7 +6,9 @@ Fixtures live in tests/fixtures/openspec/ and mirror the real layout at
 
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
 from datetime import date
 from pathlib import Path
 
@@ -15,6 +17,7 @@ import yaml
 
 from kb.core.openspec import (
     AmbiguousChangeError,
+    OpenSpecImportError,
     OpenSpecStore,
     parse_kb_meta,
     read_design_md,
@@ -276,3 +279,180 @@ class DescribeOpenSpecStoreSpecs:
     def it_returns_none_for_spec_in_unknown_repo(self):
         result = self.store.show_spec("auth-flow", repo="nonexistent")
         assert result is None
+
+
+def _run_git(*args: str, cwd: Path) -> None:
+    subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _approved_record(worktree: Path, session_id: str = "session-123") -> dict[str, str]:
+    plan_content = "# Import Approved Plan\n\n## Context\nStore the approved plan."
+    return {
+        "session_id": session_id,
+        "worktree": str(worktree),
+        "approval_time": "2026-08-18T10:30:00+00:00",
+        "plan_content": plan_content,
+        "plan_sha256": hashlib.sha256(plan_content.encode("utf-8")).hexdigest(),
+        "verified_implementation_evidence": "Focused tests passed.",
+    }
+
+
+class DescribeOpenSpecStoreImport:
+    def it_archives_provenance_and_is_idempotent(self, tmp_path):
+        repo = tmp_path / "example-repo"
+        repo.mkdir()
+        _run_git("init", "--initial-branch=main", cwd=repo)
+        store_root = tmp_path / "openspec"
+        store = OpenSpecStore(store_root)
+        record = _approved_record(repo)
+
+        first = store.import_archive(record)
+        second = store.import_archive(record)
+
+        archive_path = (
+            store_root
+            / "example-repo"
+            / "changes"
+            / "archive"
+            / "2026-08-18-import-approved-plan"
+        )
+        assert first["path"] == str(archive_path)
+        assert first["created"] is True
+        assert second["path"] == str(archive_path)
+        assert second["created"] is False
+        assert list(archive_path.parent.iterdir()) == [archive_path]
+        assert (archive_path / "design.md").read_text(encoding="utf-8") == record[
+            "plan_content"
+        ]
+        metadata = yaml.safe_load(
+            (archive_path / "kb-meta.yaml").read_text(encoding="utf-8")
+        )
+        assert metadata["session_id"] == record["session_id"]
+        assert metadata["approval_time"] == record["approval_time"]
+        assert metadata["plan_sha256"] == record["plan_sha256"]
+        assert metadata["verified_implementation_evidence"] == record[
+            "verified_implementation_evidence"
+        ]
+        assert store.show_archive("import-approved-plan", repo="example-repo")[
+            "design"
+        ] == record["plan_content"]
+
+    def it_uses_the_common_repository_for_a_linked_worktree(self, tmp_path):
+        repo = tmp_path / "example-repo"
+        repo.mkdir()
+        _run_git("init", "--initial-branch=main", cwd=repo)
+        _run_git("config", "user.email", "test@example.com", cwd=repo)
+        _run_git("config", "user.name", "Test User", cwd=repo)
+        (repo / "README.md").write_text("test\n", encoding="utf-8")
+        _run_git("add", "README.md", cwd=repo)
+        _run_git("commit", "-m", "initial", cwd=repo)
+        linked_worktree = tmp_path / "linked-worktree"
+        _run_git("worktree", "add", str(linked_worktree), cwd=repo)
+
+        result = OpenSpecStore(tmp_path / "openspec").import_archive(
+            _approved_record(linked_worktree)
+        )
+
+        assert result["repo"] == "example-repo"
+        assert Path(result["path"]).parents[2].name == "example-repo"
+
+    def it_rejects_a_mismatched_plan_digest_without_creating_an_archive(self, tmp_path):
+        repo = tmp_path / "example-repo"
+        repo.mkdir()
+        _run_git("init", "--initial-branch=main", cwd=repo)
+        record = _approved_record(repo)
+        record["plan_sha256"] = "0" * 64
+        store_root = tmp_path / "openspec"
+
+        with pytest.raises(OpenSpecImportError, match="does not match"):
+            OpenSpecStore(store_root).import_archive(record)
+
+        assert not store_root.exists()
+
+    def it_rejects_date_only_approval_times(self, tmp_path):
+        repo = tmp_path / "example-repo"
+        repo.mkdir()
+        _run_git("init", "--initial-branch=main", cwd=repo)
+        record = _approved_record(repo)
+        record["approval_time"] = "2026-08-18"
+
+        with pytest.raises(OpenSpecImportError, match="ISO-8601 timestamp"):
+            OpenSpecStore(tmp_path / "openspec").import_archive(record)
+
+    def it_rejects_a_plan_without_an_initial_h1(self, tmp_path):
+        repo = tmp_path / "example-repo"
+        repo.mkdir()
+        _run_git("init", "--initial-branch=main", cwd=repo)
+        record = _approved_record(repo)
+        record["plan_content"] = "Context before the title\n# Import Approved Plan"
+        record["plan_sha256"] = hashlib.sha256(
+            record["plan_content"].encode("utf-8")
+        ).hexdigest()
+
+        with pytest.raises(OpenSpecImportError, match="begin with a Markdown H1"):
+            OpenSpecStore(tmp_path / "openspec").import_archive(record)
+
+    def it_reuses_an_archive_created_by_a_concurrent_import(
+        self, monkeypatch, tmp_path
+    ):
+        repo = tmp_path / "example-repo"
+        repo.mkdir()
+        _run_git("init", "--initial-branch=main", cwd=repo)
+        store_root = tmp_path / "openspec"
+        store = OpenSpecStore(store_root)
+        record = _approved_record(repo)
+        archive_path = (
+            store_root
+            / "example-repo"
+            / "changes"
+            / "archive"
+            / "2026-08-18-import-approved-plan"
+        )
+        original_rename = Path.rename
+
+        def concurrent_rename(source, target):
+            if source.name.startswith(".import-") and Path(target) == archive_path:
+                archive_path.mkdir()
+                (archive_path / "design.md").write_text(
+                    record["plan_content"], encoding="utf-8"
+                )
+                (archive_path / "kb-meta.yaml").write_text(
+                    yaml.safe_dump(
+                        {
+                            "session_id": record["session_id"],
+                            "plan_sha256": record["plan_sha256"],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                raise FileExistsError
+            return original_rename(source, target)
+
+        monkeypatch.setattr(Path, "rename", concurrent_rename)
+
+        result = store.import_archive(record)
+
+        assert result["path"] == str(archive_path)
+        assert result["created"] is False
+
+    def it_maps_archive_write_failures_to_import_errors(self, monkeypatch, tmp_path):
+        repo = tmp_path / "example-repo"
+        repo.mkdir()
+        _run_git("init", "--initial-branch=main", cwd=repo)
+        original_write_text = Path.write_text
+
+        def failing_design_write(path, *args, **kwargs):
+            if path.name == "design.md":
+                raise OSError("read-only filesystem")
+            return original_write_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", failing_design_write)
+
+        with pytest.raises(OpenSpecImportError, match="could not create archive"):
+            OpenSpecStore(tmp_path / "openspec").import_archive(_approved_record(repo))

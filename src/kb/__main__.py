@@ -33,7 +33,7 @@ from kb.core.actionitems import (
 )
 from kb.core.index import VaultIndex
 from kb.core.models import Person, Product, Project
-from kb.core.openspec import AmbiguousChangeError, OpenSpecStore
+from kb.core.openspec import AmbiguousChangeError, OpenSpecImportError, OpenSpecStore
 from kb.platform.eventkit_services import EventKitCalendarService, EventKitRemindersService
 from kb.plugin_config import default_config_path, load_config
 from kb.plugin_loader import build_pane_registry, discover_plugins
@@ -578,8 +578,41 @@ def _openspec_store() -> OpenSpecStore:
 
 @cli.group()
 def openspec() -> None:
-    """Query archived OpenSpec changes and standing specs."""
+    """Query and import archived OpenSpec changes and standing specs."""
 
+
+@openspec.command("import")
+@click.argument("record_path", type=click.Path(dir_okay=False, path_type=Path))
+@click.pass_context
+def openspec_import(ctx: click.Context, record_path: Path) -> None:
+    """Import one approved OMP plan record from JSON."""
+    try:
+        with record_path.open(encoding="utf-8") as record_file:
+            record = json.load(record_file)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        click.echo(
+            json.dumps(
+                {
+                    "error": {
+                        "code": "invalid_record",
+                        "message": f"could not read record: {exc}",
+                    }
+                }
+            ),
+            err=True,
+        )
+        ctx.exit(1)
+
+    try:
+        result = _openspec_store().import_archive(record)
+    except OpenSpecImportError as exc:
+        click.echo(
+            json.dumps({"error": {"code": exc.code, "message": exc.message}}),
+            err=True,
+        )
+        ctx.exit(1)
+
+    click.echo(json.dumps(result, indent=2))
 
 @openspec.command("list")
 @click.option("--repo", help="Filter by repo-slug directory name.")
