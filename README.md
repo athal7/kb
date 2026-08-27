@@ -17,6 +17,7 @@ What works today:
   - `kb journal`: List, show, and append sections to daily journal notes.
   - `kb action-items`: List open/in-progress items and mutate status (`todo`, `progress`, `complete`).
   - `kb openspec`: List, show, and import archived OpenSpec changes and standing specs.
+  - `kb config`: Get and set configuration flags such as the vault `path` (persisted to `~/.config/kb/config.toml`).
 - **Contract Boundary Layer**: Formal contract layer (`kb.contract`) providing standardized schemas and error envelopes, insulating the core vault engine (`kb.core`) from external transport requirements and CLI consumers.
 - **Reference Collectors**: Opt-in collector scripts (such as `collectors/git_activity.py`) for gathering external activity data.
 - **High Test Coverage**: 400+ unit and integration tests (`uv run pytest`), TDD-built, and ruff-clean.
@@ -55,6 +56,10 @@ uv run kb action-items complete "Task ID or description"
 # OpenSpec queries
 uv run kb openspec list
 uv run kb openspec specs
+
+# Configuration
+uv run kb config get path
+uv run kb config set path ~/.kb
 ```
 
 Run `uv run kb --help` for the full list of commands and options.
