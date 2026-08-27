@@ -162,6 +162,24 @@ def _project_to_dict(project: Project) -> dict:
     }
 
 
+def _format_project_text(project_dict: dict) -> str:
+    """Format a project's details in a human-readable text block."""
+    lines = [f"Name: {project_dict['name']}"]
+    if project_dict.get("status"):
+        lines.append(f"Status: {project_dict['status']}")
+    if project_dict.get("product"):
+        lines.append(f"Product: {project_dict['product']}")
+    if project_dict.get("github"):
+        lines.append(f"GitHub: {project_dict['github']}")
+    if project_dict.get("linear"):
+        lines.append(f"Linear: {project_dict['linear']}")
+    if project_dict.get("people"):
+        lines.append(f"People: {', '.join(project_dict['people'])}")
+    if project_dict.get("aliases"):
+        lines.append(f"Aliases: {', '.join(project_dict['aliases'])}")
+    return "\n".join(lines)
+
+
 def _product_to_dict(product: Product) -> dict:
     return {
         "name": _entity_display_name(product),
@@ -170,6 +188,20 @@ def _product_to_dict(product: Product) -> dict:
         "linear": product.linear_label,
         "aliases": product.aliases,
     }
+
+
+def _format_product_text(product_dict: dict) -> str:
+    """Format a product's details in a human-readable text block."""
+    lines = [f"Name: {product_dict['name']}"]
+    if product_dict.get("status"):
+        lines.append(f"Status: {product_dict['status']}")
+    if product_dict.get("repos"):
+        lines.append(f"Repos: {', '.join(product_dict['repos'])}")
+    if product_dict.get("linear"):
+        lines.append(f"Linear: {product_dict['linear']}")
+    if product_dict.get("aliases"):
+        lines.append(f"Aliases: {', '.join(product_dict['aliases'])}")
+    return "\n".join(lines)
 
 
 def _validate_date_param(
@@ -254,25 +286,39 @@ def projects() -> None:
 
 
 @projects.command("list")
-def projects_list() -> None:
-    """Print every project in the vault as a JSON array."""
+@click.pass_context
+def projects_list(ctx: click.Context) -> None:
+    """Print every project in the vault."""
     index = _build_index()
-    click.echo(json.dumps([_project_to_dict(p) for p in index.all_projects()], indent=2))
+    projects_dicts = [_project_to_dict(p) for p in index.all_projects()]
+    fmt = _get_format(ctx)
+    if fmt == "json":
+        click.echo(json.dumps(projects_dicts, indent=2))
+    else:
+        click.echo("\n\n".join(_format_project_text(p) for p in projects_dicts))
 
 
 @projects.command("show")
 @click.argument("name")
 @click.pass_context
 def projects_show(ctx: click.Context, name: str) -> None:
-    """Print one project's record as JSON, looked up by name or alias."""
+    """Print one project's record, looked up by name or alias."""
     index = _build_index()
     project = index.project(name)
+    fmt = _get_format(ctx)
     if project is None:
-        # Keep stdout clean JSON-on-success; the error goes to stderr and the
-        # exit code is the actual success/failure signal for scripts.
-        click.echo(json.dumps({"error": "not found", "name": name}), err=True)
+        # Keep stdout clean on success; the error goes to stderr and the exit
+        # code is the actual success/failure signal for scripts.
+        if fmt == "json":
+            click.echo(json.dumps({"error": "not found", "name": name}), err=True)
+        else:
+            click.echo(f"Error: project '{name}' not found", err=True)
         ctx.exit(1)
-    click.echo(json.dumps(_project_to_dict(project), indent=2))
+    project_dict = _project_to_dict(project)
+    if fmt == "json":
+        click.echo(json.dumps(project_dict, indent=2))
+    else:
+        click.echo(_format_project_text(project_dict))
 
 
 @cli.group()
@@ -281,25 +327,39 @@ def products() -> None:
 
 
 @products.command("list")
-def products_list() -> None:
-    """Print every product in the vault as a JSON array."""
+@click.pass_context
+def products_list(ctx: click.Context) -> None:
+    """Print every product in the vault."""
     index = _build_index()
-    click.echo(json.dumps([_product_to_dict(p) for p in index.all_products()], indent=2))
+    products_dicts = [_product_to_dict(p) for p in index.all_products()]
+    fmt = _get_format(ctx)
+    if fmt == "json":
+        click.echo(json.dumps(products_dicts, indent=2))
+    else:
+        click.echo("\n\n".join(_format_product_text(p) for p in products_dicts))
 
 
 @products.command("show")
 @click.argument("name")
 @click.pass_context
 def products_show(ctx: click.Context, name: str) -> None:
-    """Print one product's record as JSON, looked up by name or alias."""
+    """Print one product's record, looked up by name or alias."""
     index = _build_index()
     product = index.product(name)
+    fmt = _get_format(ctx)
     if product is None:
-        # Keep stdout clean JSON-on-success; the error goes to stderr and the
-        # exit code is the actual success/failure signal for scripts.
-        click.echo(json.dumps({"error": "not found", "name": name}), err=True)
+        # Keep stdout clean on success; the error goes to stderr and the exit
+        # code is the actual success/failure signal for scripts.
+        if fmt == "json":
+            click.echo(json.dumps({"error": "not found", "name": name}), err=True)
+        else:
+            click.echo(f"Error: product '{name}' not found", err=True)
         ctx.exit(1)
-    click.echo(json.dumps(_product_to_dict(product), indent=2))
+    product_dict = _product_to_dict(product)
+    if fmt == "json":
+        click.echo(json.dumps(product_dict, indent=2))
+    else:
+        click.echo(_format_product_text(product_dict))
 
 
 @cli.group("action-items")
@@ -332,18 +392,36 @@ def _action_item_to_dict(item: ActionItem) -> dict:
     }
 
 
+def _format_action_item_text(item: dict) -> str:
+    """Format an action item's fields as a human-readable text block."""
+    lines = [f"Line: {item['line_no']}", f"Status: {item['status']}"]
+    if item.get("source_group"):
+        lines.append(f"Group: {item['source_group']}")
+    lines.append(f"Text: {item['text']}")
+    return "\n".join(lines)
+
+
 @action_items_group.command("list")
-def action_items_list() -> None:
-    """Print open or in-progress action items as a JSON array."""
+@click.pass_context
+def action_items_list(ctx: click.Context) -> None:
+    """Print open or in-progress action items."""
     kb_root = resolve_kb_root(None, validate=True)
     file_obj, error = _get_action_items_file(kb_root)
+    fmt = _get_format(ctx)
     if file_obj is None:
-        click.echo(json.dumps({"error": error or "unknown error"}), err=True)
-        click.get_current_context().exit(1)
+        if fmt == "json":
+            click.echo(json.dumps({"error": error or "unknown error"}), err=True)
+        else:
+            click.echo(f"Error: {error or 'unknown error'}", err=True)
+        ctx.exit(1)
 
     # We only return "open" action items (not completed/checked)
     open_items = [i for i in file_obj.items if not i.checked]
-    click.echo(json.dumps([_action_item_to_dict(i) for i in open_items], indent=2))
+    items = [_action_item_to_dict(i) for i in open_items]
+    if fmt == "json":
+        click.echo(json.dumps(items, indent=2))
+    else:
+        click.echo("\n\n".join(_format_action_item_text(i) for i in items))
 
 
 def _update_action_item_status(line_no: int, status: str) -> None:
@@ -530,6 +608,14 @@ def journal_append(
     click.echo(json.dumps(success_resp, indent=2))
 
 
+def _format_journal_entry_text(entry: dict) -> str:
+    """Format a journal entry's listing fields as a text block."""
+    lines = [f"Date: {entry['date']}"]
+    if entry.get("file"):
+        lines.append(f"File: {entry['file']}")
+    return "\n".join(lines)
+
+
 @journal.command("list")
 @click.option(
     "--from",
@@ -545,8 +631,11 @@ def journal_append(
     callback=_validate_date_param,
     help="End date filter (YYYY-MM-DD, inclusive).",
 )
-def journal_list(from_date: str | None, to_date: str | None) -> None:
-    """Print every journal entry in the vault as a JSON array, optionally filtered by date."""
+@click.pass_context
+def journal_list(
+    ctx: click.Context, from_date: str | None, to_date: str | None
+) -> None:
+    """Print every journal entry in the vault, optionally filtered by date."""
     index = _build_index()
     from_d = date.fromisoformat(from_date) if from_date else None
     to_d = date.fromisoformat(to_date) if to_date else None
@@ -558,19 +647,39 @@ def journal_list(from_date: str | None, to_date: str | None) -> None:
         }
         for entry in entries
     ]
-    click.echo(json.dumps(results, indent=2))
+    fmt = _get_format(ctx)
+    if fmt == "json":
+        click.echo(json.dumps(results, indent=2))
+    else:
+        click.echo("\n\n".join(_format_journal_entry_text(e) for e in results))
+
+
+def _format_journal_entry_detail_text(entry: dict) -> str:
+    """Render a journal entry as markdown: its date H1 plus each section."""
+    parts = [f"# {entry['date']}"]
+    for section in entry["sections"]:
+        part: list[str] = []
+        if section["heading"] is not None:
+            part.append(f"{'#' * section['level']} {section['heading']}")
+        part.extend(section["lines"])
+        parts.append("\n".join(part))
+    return "\n\n".join(parts)
 
 
 @journal.command("show")
 @click.argument("date_str", metavar="DATE", callback=_validate_date_param)
 @click.pass_context
 def journal_show(ctx: click.Context, date_str: str) -> None:
-    """Print one journal entry's sections/content as JSON, looked up by date (YYYY-MM-DD)."""
+    """Print one journal entry's sections/content, looked up by date (YYYY-MM-DD)."""
     index = _build_index()
     d = date.fromisoformat(date_str)
     entries = index.journal_entries(start=d, end=d)
+    fmt = _get_format(ctx)
     if not entries:
-        click.echo(json.dumps({"error": "not found", "date": date_str}), err=True)
+        if fmt == "json":
+            click.echo(json.dumps({"error": "not found", "date": date_str}), err=True)
+        else:
+            click.echo(f"Error: journal entry '{date_str}' not found", err=True)
         ctx.exit(1)
 
     entry = entries[0]
@@ -586,7 +695,10 @@ def journal_show(ctx: click.Context, date_str: str) -> None:
             for s in entry.sections
         ]
     }
-    click.echo(json.dumps(result, indent=2))
+    if fmt == "json":
+        click.echo(json.dumps(result, indent=2))
+    else:
+        click.echo(_format_journal_entry_detail_text(result))
 
 
 def main() -> None:
@@ -668,6 +780,22 @@ def openspec_import(ctx: click.Context, record_path: Path) -> None:
 
     click.echo(json.dumps(result, indent=2))
 
+def _format_archive_text(archive: dict) -> str:
+    """Format an archived change's listing fields as a text block."""
+    lines = [f"Change: {archive.get('change', '')}"]
+    if archive.get("repo"):
+        lines.append(f"Repo: {archive['repo']}")
+    if archive.get("date"):
+        lines.append(f"Date: {archive['date']}")
+    if archive.get("branch"):
+        lines.append(f"Branch: {archive['branch']}")
+    if archive.get("worktree"):
+        lines.append(f"Worktree: {archive['worktree']}")
+    if archive.get("path"):
+        lines.append(f"Path: {archive['path']}")
+    return "\n".join(lines)
+
+
 @openspec.command("list")
 @click.option("--repo", help="Filter by repo-slug directory name.")
 @click.option(
@@ -684,15 +812,38 @@ def openspec_import(ctx: click.Context, record_path: Path) -> None:
     callback=_validate_date_param,
     help="End date filter (YYYY-MM-DD, inclusive).",
 )
+@click.pass_context
 def openspec_list(
+    ctx: click.Context,
     repo: str | None,
     from_date: str | None,
     to_date: str | None,
 ) -> None:
-    """Print all archived OpenSpec changes as a JSON array."""
+    """Print all archived OpenSpec changes, optionally filtered."""
     store = _openspec_store()
     archives = store.list_archives(repo=repo, from_date=from_date, to_date=to_date)
-    click.echo(json.dumps(archives, indent=2))
+    fmt = _get_format(ctx)
+    if fmt == "json":
+        click.echo(json.dumps(archives, indent=2))
+    else:
+        click.echo("\n\n".join(_format_archive_text(a) for a in archives))
+
+
+def _format_archive_detail_text(archive: dict) -> str:
+    """Render an archived change as a metadata block plus its design.md."""
+    meta = archive.get("meta", {})
+    lines = [f"Change: {meta.get('change', '')}"]
+    if meta.get("repo"):
+        lines.append(f"Repo: {meta['repo']}")
+    if meta.get("date"):
+        lines.append(f"Date: {meta['date']}")
+    if meta.get("branch"):
+        lines.append(f"Branch: {meta['branch']}")
+    if meta.get("worktree"):
+        lines.append(f"Worktree: {meta['worktree']}")
+    header = "\n".join(lines)
+    design = archive.get("design")
+    return f"{header}\n\n{design}" if design else header
 
 
 @openspec.command("show")
@@ -704,29 +855,44 @@ def openspec_show(
     change_name: str,
     repo: str | None,
 ) -> None:
-    """Print one change's metadata and design.md as JSON."""
+    """Print one change's metadata and design.md, looked up by name."""
     store = _openspec_store()
+    fmt = _get_format(ctx)
     try:
         result = store.show_archive(change_name, repo=repo)
     except AmbiguousChangeError as exc:
-        click.echo(
-            json.dumps(
-                {
-                    "error": "ambiguous",
-                    "change": exc.change_name,
-                    "repos": [c["meta"]["repo"] for c in exc.candidates],
-                }
-            ),
-            err=True,
-        )
+        repos = [c["meta"]["repo"] for c in exc.candidates]
+        if fmt == "json":
+            click.echo(
+                json.dumps(
+                    {
+                        "error": "ambiguous",
+                        "change": exc.change_name,
+                        "repos": repos,
+                    }
+                ),
+                err=True,
+            )
+        else:
+            click.echo(
+                f"Error: change '{change_name}' is ambiguous across repos: "
+                f"{', '.join(repos)}",
+                err=True,
+            )
         ctx.exit(1)
     if result is None:
-        click.echo(
-            json.dumps({"error": "not found", "change": change_name}),
-            err=True,
-        )
+        if fmt == "json":
+            click.echo(
+                json.dumps({"error": "not found", "change": change_name}),
+                err=True,
+            )
+        else:
+            click.echo(f"Error: change '{change_name}' not found", err=True)
         ctx.exit(1)
-    click.echo(json.dumps(result, indent=2))
+    if fmt == "json":
+        click.echo(json.dumps(result, indent=2))
+    else:
+        click.echo(_format_archive_detail_text(result))
 
 
 @openspec.group()
@@ -734,13 +900,35 @@ def specs() -> None:
     """Query standing specs from the OpenSpec store."""
 
 
+def _format_spec_text(spec: dict) -> str:
+    """Format a standing spec's listing fields as a text block."""
+    lines = [f"Name: {spec['name']}"]
+    if spec.get("repo"):
+        lines.append(f"Repo: {spec['repo']}")
+    if spec.get("path"):
+        lines.append(f"Path: {spec['path']}")
+    return "\n".join(lines)
+
+
 @specs.command("list")
 @click.option("--repo", help="Filter by repo-slug directory name.")
-def openspec_specs_list(repo: str | None) -> None:
-    """Print all standing specs as a JSON array."""
+@click.pass_context
+def openspec_specs_list(ctx: click.Context, repo: str | None) -> None:
+    """Print all standing specs, optionally filtered by repo."""
     store = _openspec_store()
     specs_list = store.list_specs(repo=repo)
-    click.echo(json.dumps(specs_list, indent=2))
+    fmt = _get_format(ctx)
+    if fmt == "json":
+        click.echo(json.dumps(specs_list, indent=2))
+    else:
+        click.echo("\n\n".join(_format_spec_text(s) for s in specs_list))
+
+
+def _format_spec_detail_text(spec: dict) -> str:
+    """Render a standing spec as its name/repo header plus raw markdown."""
+    header = f"# {spec['name']} ({spec['repo']})"
+    content = spec.get("content", "")
+    return f"{header}\n\n{content}" if content else header
 
 
 @specs.command("show")
@@ -752,16 +940,25 @@ def openspec_specs_show(
     spec_name: str,
     repo: str,
 ) -> None:
-    """Print one standing spec's content as JSON."""
+    """Print one standing spec's content, looked up by name and repo."""
     store = _openspec_store()
     result = store.show_spec(spec_name, repo=repo)
+    fmt = _get_format(ctx)
     if result is None:
-        click.echo(
-            json.dumps({"error": "not found", "spec": spec_name, "repo": repo}),
-            err=True,
-        )
+        if fmt == "json":
+            click.echo(
+                json.dumps({"error": "not found", "spec": spec_name, "repo": repo}),
+                err=True,
+            )
+        else:
+            click.echo(
+                f"Error: spec '{spec_name}' not found in repo '{repo}'", err=True
+            )
         ctx.exit(1)
-    click.echo(json.dumps(result, indent=2))
+    if fmt == "json":
+        click.echo(json.dumps(result, indent=2))
+    else:
+        click.echo(_format_spec_detail_text(result))
 
 
 def main() -> None:

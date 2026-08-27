@@ -575,3 +575,111 @@ class DescribeJournalShow:
 
         assert result.exit_code != 0
         assert "must be in YYYY-MM-DD format" in result.output
+
+
+class DescribeProjectsListFormat:
+    def it_prints_a_text_list_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "projects", "list"])
+
+        assert result.exit_code == 0
+        assert "Name: Atlas" in result.output
+        assert "Status: blocked" in result.output
+        assert "Name: Sentinel" in result.output
+        assert "Product: LUMEN" in result.output
+
+
+class DescribeProjectsShowFormat:
+    def it_prints_the_matching_project_as_text_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "projects", "show", "Atlas"])
+
+        assert result.exit_code == 0
+        assert "Name: Atlas" in result.output
+        assert "Status: blocked" in result.output
+
+    def it_prints_text_error_for_unknown_name_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "projects", "show", "Nobody Real"])
+
+        assert result.exit_code != 0
+        assert "Error: project 'Nobody Real' not found" in result.output
+
+
+class DescribeProductsListFormat:
+    def it_prints_a_text_list_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "products", "list"])
+
+        assert result.exit_code == 0
+        assert "Name: LUMEN" in result.output
+        assert "Status: active" in result.output
+
+
+class DescribeProductsShowFormat:
+    def it_prints_the_matching_product_as_text_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "products", "show", "LUMEN"])
+
+        assert result.exit_code == 0
+        assert "Name: LUMEN" in result.output
+        assert "Status: active" in result.output
+        assert "Repos: lumen" in result.output
+
+    def it_prints_text_error_for_unknown_name_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "products", "show", "Nobody Real"])
+
+        assert result.exit_code != 0
+        assert "Error: product 'Nobody Real' not found" in result.output
+
+
+class DescribeActionItemsListFormat:
+    def it_prints_a_text_list_when_format_text_is_specified(self, monkeypatch, tmp_path):
+        kb_root = tmp_path / "vault"
+        shutil.copytree(VAULT, kb_root)
+        monkeypatch.setenv("KB_ROOT", str(kb_root))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "action-items", "list"])
+
+        assert result.exit_code == 0
+        assert "Line: 3" in result.output
+        assert "Status: todo" in result.output
+        assert "Text: **Diego**" in result.output
+
+
+class DescribeJournalListFormat:
+    def it_prints_a_text_list_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "journal", "list"])
+
+        assert result.exit_code == 0
+        assert "Date: 2026-07-12" in result.output
+        assert "File: journal/2026-07-12.md" in result.output
+
+
+class DescribeJournalShowFormat:
+    def it_renders_markdown_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "journal", "show", "2026-07-12"])
+
+        assert result.exit_code == 0
+        assert "# 2026-07-12" in result.output
+        assert "## Slack Context" in result.output
+        assert "- Discussion about Anvil access in [[Lumen]] channel" in result.output
+
+    def it_prints_text_error_for_unknown_date_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(VAULT))
+
+        result = CliRunner().invoke(cli, ["--format", "text", "journal", "show", "2099-01-01"])
+
+        assert result.exit_code != 0
+        assert "Error: journal entry '2099-01-01' not found" in result.output
