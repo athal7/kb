@@ -25,7 +25,12 @@ from pathlib import Path
 
 import click
 
-from kb.config import resolve_kb_root
+from kb.config import (
+    UnknownConfigKeyError,
+    get_config_value,
+    resolve_kb_root,
+    set_config_value,
+)
 from kb.core.actionitems import (
     ACTION_ITEMS_FILENAME,
     ActionItem,
@@ -203,6 +208,36 @@ def cli(ctx: click.Context, format: str) -> None:
     """
     if ctx.invoked_subcommand is None:
         build_app().run()
+
+
+@cli.group("config")
+def config_group() -> None:
+    """Get and set kb configuration values (stored in ~/.config/kb/config.toml)."""
+
+
+@config_group.command("get")
+@click.argument("key")
+def config_get(key: str) -> None:
+    """Print the value of a configuration KEY (its default if unset)."""
+    try:
+        value = get_config_value(key)
+    except UnknownConfigKeyError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo("" if value is None else value)
+
+
+@config_group.command("set")
+@click.argument("key")
+@click.argument("value")
+def config_set(key: str, value: str) -> None:
+    """Set configuration KEY to VALUE, persisting it to the config file."""
+    try:
+        set_config_value(key, value)
+    except UnknownConfigKeyError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Set {key} = {value}")
+
+
 
 
 @cli.group()

@@ -13,6 +13,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "pydantic>=2.13.4",
     "pyobjc-framework-EventKit>=12.2.2 ; sys_platform == 'darwin'",
+    "tomli-w>=1.2.0",
 ]
 
 [project.scripts]
