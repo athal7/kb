@@ -54,6 +54,7 @@ class DescribeHelp:
         assert "projects" in result.output
         assert "products" in result.output
         assert "openspec" in result.output
+        assert "config" in result.output
 
 
 class DescribeVersion:
@@ -683,3 +684,39 @@ class DescribeJournalShowFormat:
 
         assert result.exit_code != 0
         assert "Error: journal entry '2099-01-01' not found" in result.output
+class DescribeConfig:
+    def it_gets_the_default_path_when_unset(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+
+        result = CliRunner().invoke(cli, ["config", "get", "path"])
+
+        assert result.exit_code == 0
+        assert result.output.strip() == "~/.local/share/kb"
+
+    def it_sets_then_gets_a_path(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+
+        set_result = CliRunner().invoke(cli, ["config", "set", "path", "~/.kb"])
+        assert set_result.exit_code == 0
+        assert "path" in set_result.output
+
+        get_result = CliRunner().invoke(cli, ["config", "get", "path"])
+        assert get_result.exit_code == 0
+        assert get_result.output.strip() == "~/.kb"
+
+
+    def it_exits_non_zero_for_an_unknown_key_on_get(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+
+        result = CliRunner().invoke(cli, ["config", "get", "bogus"])
+
+        assert result.exit_code != 0
+        assert "unknown config key" in result.output
+
+    def it_exits_non_zero_for_an_unknown_key_on_set(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+
+        result = CliRunner().invoke(cli, ["config", "set", "bogus", "x"])
+
+        assert result.exit_code != 0
+        assert "unknown config key" in result.output
