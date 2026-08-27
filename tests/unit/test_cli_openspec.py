@@ -303,3 +303,91 @@ class DescribeOpenspecImport:
 
         assert result.exit_code != 0
         assert json.loads(result.output)["error"]["code"] == "invalid_record"
+
+
+class DescribeOpenspecFormat:
+    def it_lists_archives_as_text_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(OPENSPEC_FIXTURES))
+
+        result = CliRunner().invoke(
+            cli, ["--format", "text", "openspec", "list", "--repo", "alpha-repo"]
+        )
+
+        assert result.exit_code == 0
+        assert "Change: add-auth-flow" in result.output
+        assert "Repo: alpha-repo" in result.output
+
+    def it_shows_archive_metadata_and_design_as_text(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(OPENSPEC_FIXTURES))
+
+        result = CliRunner().invoke(
+            cli,
+            ["--format", "text", "openspec", "show", "add-auth-flow", "--repo", "alpha-repo"],
+        )
+
+        assert result.exit_code == 0
+        assert "Change: add-auth-flow" in result.output
+        assert "# Add Authentication Flow" in result.output
+
+    def it_prints_text_error_for_unknown_change(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(OPENSPEC_FIXTURES))
+
+        result = CliRunner().invoke(
+            cli, ["--format", "text", "openspec", "show", "nonexistent-change"]
+        )
+
+        assert result.exit_code != 0
+        assert "Error: change 'nonexistent-change' not found" in result.output
+
+    def it_prints_text_error_for_ambiguous_change(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(OPENSPEC_FIXTURES))
+
+        result = CliRunner().invoke(
+            cli, ["--format", "text", "openspec", "show", "add-auth-flow"]
+        )
+
+        assert result.exit_code != 0
+        assert "is ambiguous across repos" in result.output
+
+
+class DescribeOpenspecSpecsFormat:
+    def it_lists_specs_as_text_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(OPENSPEC_FIXTURES))
+
+        result = CliRunner().invoke(
+            cli, ["--format", "text", "openspec", "specs", "list", "--repo", "alpha-repo"]
+        )
+
+        assert result.exit_code == 0
+        assert "Name: auth-flow" in result.output
+        assert "Repo: alpha-repo" in result.output
+
+    def it_shows_spec_content_as_text_when_format_text_is_specified(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(OPENSPEC_FIXTURES))
+
+        result = CliRunner().invoke(
+            cli,
+            ["--format", "text", "openspec", "specs", "show", "auth-flow", "--repo", "alpha-repo"],
+        )
+
+        assert result.exit_code == 0
+        assert "# auth-flow (alpha-repo)" in result.output
+        assert "auth-flow Specification" in result.output
+
+    def it_prints_text_error_for_unknown_spec(self, monkeypatch):
+        monkeypatch.setenv("KB_ROOT", str(Path("/tmp/fake-kb")))
+        monkeypatch.setenv("KB_OPENSPEC_ROOT", str(OPENSPEC_FIXTURES))
+
+        result = CliRunner().invoke(
+            cli,
+            ["--format", "text", "openspec", "specs", "show", "nope", "--repo", "alpha-repo"],
+        )
+
+        assert result.exit_code != 0
+        assert "Error: spec 'nope' not found in repo 'alpha-repo'" in result.output
