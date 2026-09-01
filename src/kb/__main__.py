@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -40,6 +41,17 @@ from kb.core.actionitems import (
 from kb.core.index import VaultIndex
 from kb.core.models import Person, Product, Project
 from kb.core.openspec import AmbiguousChangeError, OpenSpecImportError, OpenSpecStore
+from kb.cq.projection import (
+    ALL_LOCAL_AGENTS_POLICY,
+    CQCli,
+    ProjectionLedger,
+    ProjectionManifest,
+    ProjectionScope,
+    apply_manifest,
+    build_plan,
+    verify,
+)
+from kb.cq.projection.safety import checked_target
 from kb.platform.eventkit_services import EventKitCalendarService, EventKitRemindersService
 from kb.plugin_config import default_config_path, load_config
 from kb.plugin_loader import build_pane_registry, discover_plugins
@@ -218,9 +230,7 @@ def _validate_date_param(
     try:
         date.fromisoformat(value)
     except ValueError as exc:
-        raise click.BadParameter(
-            "must be in YYYY-MM-DD format", ctx=ctx, param=param
-        ) from exc
+        raise click.BadParameter("must be in YYYY-MM-DD format", ctx=ctx, param=param) from exc
     return value
 
 
@@ -268,8 +278,6 @@ def config_set(key: str, value: str) -> None:
     except UnknownConfigKeyError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Set {key} = {value}")
-
-
 
 
 @cli.group()
@@ -507,18 +515,13 @@ def journal() -> None:
 
 @journal.command("append")
 @click.option(
-    "--date",
-    "date_str",
-    help="The date of the journal entry (YYYY-MM-DD). Defaults to today."
+    "--date", "date_str", help="The date of the journal entry (YYYY-MM-DD). Defaults to today."
 )
 @click.option("--section", help="The section heading to append to (e.g., 'Git Activity').")
 @click.option("--content", help="The content to append. Reads from stdin if not provided or '-'.")
 @click.pass_context
 def journal_append(
-    ctx: click.Context,
-    date_str: str | None,
-    section: str | None,
-    content: str | None
+    ctx: click.Context, date_str: str | None, section: str | None, content: str | None
 ) -> None:
     """Append content to a daily journal entry, optionally under a specific section."""
     import re
@@ -537,15 +540,16 @@ def journal_append(
                     "code": "validation.invalid_date",
                     "message": f"Invalid date format: {date_str}. Must be YYYY-MM-DD.",
                     "path": "/date",
-                    "retryable": False
+                    "retryable": False,
                 },
-                "warnings": []
+                "warnings": [],
             }
             click.echo(json.dumps(err_resp, indent=2), err=True)
             ctx.exit(1)
 
     if content is None or content == "-":
         import sys
+
         content = sys.stdin.read()
 
     kb_root = resolve_kb_root(None, validate=True)
@@ -587,9 +591,7 @@ def journal_append(
             new_lines.extend(content_lines)
             idx = sections.index(target_section)
             sections[idx] = Section(
-                heading=target_section.heading,
-                level=target_section.level,
-                lines=new_lines
+                heading=target_section.heading, level=target_section.level, lines=new_lines
             )
         else:
             sections.append(Section(heading=section, level=2, lines=content_lines))
@@ -605,9 +607,7 @@ def journal_append(
                     new_lines.append("")
             new_lines.extend(content_lines)
             sections[-1] = Section(
-                heading=last_section.heading,
-                level=last_section.level,
-                lines=new_lines
+                heading=last_section.heading, level=last_section.level, lines=new_lines
             )
         else:
             sections.append(Section(heading=None, level=0, lines=content_lines))
@@ -636,9 +636,9 @@ def journal_append(
             "file": f"journal/{date_str}.md",
             "date": date_str,
             "section": section,
-            "bytes_written": len(new_text.encode("utf-8"))
+            "bytes_written": len(new_text.encode("utf-8")),
         },
-        "warnings": []
+        "warnings": [],
     }
     click.echo(json.dumps(success_resp, indent=2))
 
@@ -667,9 +667,7 @@ def _format_journal_entry_text(entry: dict) -> str:
     help="End date filter (YYYY-MM-DD, inclusive).",
 )
 @click.pass_context
-def journal_list(
-    ctx: click.Context, from_date: str | None, to_date: str | None
-) -> None:
+def journal_list(ctx: click.Context, from_date: str | None, to_date: str | None) -> None:
     """Print every journal entry in the vault, optionally filtered by date."""
     index = _build_index()
     from_d = date.fromisoformat(from_date) if from_date else None
@@ -728,7 +726,7 @@ def journal_show(ctx: click.Context, date_str: str) -> None:
                 "lines": s.lines,
             }
             for s in entry.sections
-        ]
+        ],
     }
     if fmt == "json":
         click.echo(json.dumps(result, indent=2))
@@ -744,6 +742,227 @@ if __name__ == "__main__":
     main()
 
 # ---------------------------------------------------------------------------
+# CQ projection — deterministic projection into the configured local CQ DB
+# ---------------------------------------------------------------------------
+
+
+_DEFAULT_PROJECTION_LEDGER = "~/.local/share/kb/cq-projection-ledger.json"
+_PROJECTION_SCOPE_CHOICES = (
+    "people",
+    "projects",
+    "products",
+    "decisions",
+    "standing",
+)
+
+
+@cli.group()
+def cq() -> None:
+    """Project canonical KB records into the isolated local CQ index."""
+
+
+def _projection_scopes(values: tuple[str, ...]) -> tuple[ProjectionScope, ...]:
+    if not values:
+        return (
+            ProjectionScope.PEOPLE,
+            ProjectionScope.PROJECTS,
+            ProjectionScope.PRODUCTS,
+            ProjectionScope.DECISIONS,
+            ProjectionScope.STANDING,
+        )
+    try:
+        return tuple(ProjectionScope(value) for value in values)
+    except ValueError as exc:
+        raise click.BadParameter(
+            "scope must be people, projects, products, decisions, or standing"
+        ) from exc
+
+
+def _projection_root(value: str | None) -> Path:
+    root = Path(value or get_config_value("path") or "").expanduser()
+    if not root.is_dir():
+        raise click.ClickException(f"KB vault root does not exist: {root}")
+    return root.resolve()
+
+
+def _projection_ledger(value: str | None) -> ProjectionLedger:
+    return ProjectionLedger.open(Path(value or _DEFAULT_PROJECTION_LEDGER).expanduser())
+
+
+def _projection_target() -> Path:
+    configured = os.environ.get("CQ_LOCAL_DB_PATH")
+    if not configured:
+        raise click.ClickException("CQ_LOCAL_DB_PATH must configure the local CQ database")
+    try:
+        target = checked_target(Path(configured), os.environ)
+        CQCli(target).status()
+        return target
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".cq-projection-", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            json.dump(payload, output, indent=2, sort_keys=True)
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        temporary.replace(path)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _build_projection_plan(
+    *,
+    scope: tuple[str, ...],
+    kb_root: str | None,
+    ledger_path: str | None,
+    authorization_policy: str | None,
+) -> ProjectionManifest:
+    return build_plan(
+        kb_root=_projection_root(kb_root),
+        ledger=_projection_ledger(ledger_path),
+        target_db=_projection_target(),
+        authorization_policy=authorization_policy,
+        scopes=_projection_scopes(scope),
+    )
+
+
+@cq.group()
+def projection() -> None:
+    """Plan, approve, apply, verify, and backfill local CQ projection."""
+
+
+@projection.command("plan")
+@click.option("--scope", multiple=True, type=click.Choice(_PROJECTION_SCOPE_CHOICES))
+@click.option("--kb-root")
+@click.option("--ledger-path")
+@click.option("--authorization-policy", type=click.Choice([ALL_LOCAL_AGENTS_POLICY]))
+@click.option("--output", required=True, type=click.Path(dir_okay=False, path_type=Path))
+def projection_plan(
+    scope: tuple[str, ...],
+    kb_root: str | None,
+    ledger_path: str | None,
+    authorization_policy: str | None,
+    output: Path,
+) -> None:
+    """Write a non-mutating unapproved plan manifest."""
+    _write_json(
+        output,
+        _build_projection_plan(
+            scope=scope,
+            kb_root=kb_root,
+            ledger_path=ledger_path,
+            authorization_policy=authorization_policy,
+        ).to_dict(),
+    )
+    click.echo(str(output))
+
+
+@projection.command("approve")
+@click.argument("plan_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--output", required=True, type=click.Path(dir_okay=False, path_type=Path))
+def projection_approve(plan_path: Path, output: Path) -> None:
+    """Bind approval to the reviewed full manifest content digest."""
+    manifest = ProjectionManifest.from_dict(json.loads(plan_path.read_text(encoding="utf-8")))
+    if manifest.approved_digest is not None:
+        raise click.ClickException("plan already contains an approval digest")
+    _write_json(output, manifest.approve().to_dict())
+    click.echo(str(output))
+
+
+@projection.command("apply")
+@click.argument("manifest_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--ledger-path")
+@click.option("--kb-root")
+def projection_apply(manifest_path: Path, ledger_path: str | None, kb_root: str | None) -> None:
+    """Apply only an approval-bound manifest through the CQ CLI."""
+    manifest = ProjectionManifest.from_dict(json.loads(manifest_path.read_text(encoding="utf-8")))
+    target = _projection_target()
+    results = apply_manifest(
+        manifest=manifest,
+        ledger=_projection_ledger(ledger_path),
+        kb_root=_projection_root(kb_root),
+        target_db=target,
+        environment=dict(os.environ),
+        cq=CQCli(target, environment=os.environ),
+    )
+    click.echo(json.dumps({"results": [result.to_dict() for result in results]}, indent=2))
+
+
+@projection.command("status")
+@click.option("--ledger-path")
+def projection_status(ledger_path: str | None) -> None:
+    """Show durable expected-source completion and stale state."""
+    ledger = _projection_ledger(ledger_path)
+    click.echo(
+        json.dumps(
+            {
+                "scopes": [completion.to_dict() for completion in ledger.completions()],
+                "records": [record.to_dict() for record in ledger.records()],
+                "pending": [pending.to_dict() for pending in ledger.pending()],
+            },
+            indent=2,
+        )
+    )
+
+
+@projection.command("verify")
+@click.option("--scope", multiple=True, type=click.Choice(_PROJECTION_SCOPE_CHOICES))
+@click.option("--ledger-path")
+def projection_verify(scope: tuple[str, ...], ledger_path: str | None) -> None:
+    """Verify exact CQ identity, KU ID, and source content marker mappings."""
+    target = _projection_target()
+    results = verify(
+        ledger=_projection_ledger(ledger_path),
+        cq=CQCli(target, environment=os.environ),
+        scopes=_projection_scopes(scope),
+    )
+    invalid = sum(not result.valid for result in results)
+    click.echo(
+        json.dumps(
+            {
+                "valid": len(results) - invalid,
+                "invalid": invalid,
+                "results": [result.to_dict() for result in results],
+            },
+            indent=2,
+        )
+    )
+    if invalid:
+        raise click.exceptions.Exit(1)
+
+
+@projection.command("backfill")
+@click.option("--kb-root")
+@click.option("--ledger-path")
+@click.option("--authorization-policy", type=click.Choice([ALL_LOCAL_AGENTS_POLICY]))
+@click.option("--output", required=True, type=click.Path(dir_okay=False, path_type=Path))
+def projection_backfill(
+    kb_root: str | None,
+    ledger_path: str | None,
+    authorization_policy: str | None,
+    output: Path,
+) -> None:
+    """Write a one-time all-scope unapproved backfill plan."""
+    _write_json(
+        output,
+        _build_projection_plan(
+            scope=(),
+            kb_root=kb_root,
+            ledger_path=ledger_path,
+            authorization_policy=authorization_policy,
+        ).to_dict(),
+    )
+    click.echo(str(output))
+
+
+# ---------------------------------------------------------------------------
 # openspec — query archived OpenSpec changes and standing specs
 # ---------------------------------------------------------------------------
 
@@ -757,9 +976,7 @@ def _validate_date_param(
     try:
         date.fromisoformat(value)
     except ValueError as exc:
-        raise click.BadParameter(
-            "must be in YYYY-MM-DD format", ctx=ctx, param=param
-        ) from exc
+        raise click.BadParameter("must be in YYYY-MM-DD format", ctx=ctx, param=param) from exc
     return value
 
 
@@ -814,6 +1031,7 @@ def openspec_import(ctx: click.Context, record_path: Path) -> None:
         ctx.exit(1)
 
     click.echo(json.dumps(result, indent=2))
+
 
 def _format_archive_text(archive: dict) -> str:
     """Format an archived change's listing fields as a text block."""
@@ -910,8 +1128,7 @@ def openspec_show(
             )
         else:
             click.echo(
-                f"Error: change '{change_name}' is ambiguous across repos: "
-                f"{', '.join(repos)}",
+                f"Error: change '{change_name}' is ambiguous across repos: {', '.join(repos)}",
                 err=True,
             )
         ctx.exit(1)
@@ -986,9 +1203,7 @@ def openspec_specs_show(
                 err=True,
             )
         else:
-            click.echo(
-                f"Error: spec '{spec_name}' not found in repo '{repo}'", err=True
-            )
+            click.echo(f"Error: spec '{spec_name}' not found in repo '{repo}'", err=True)
         ctx.exit(1)
     if fmt == "json":
         click.echo(json.dumps(result, indent=2))

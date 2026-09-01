@@ -64,6 +64,62 @@ uv run kb config set path ~/.kb
 
 Run `uv run kb --help` for the full list of commands and options.
 
+## Local CQ projection
+
+`kb cq projection` indexes canonical KB records in the configured local CQ
+database. It uses the supported `cq` CLI. It does not open or write CQ SQLite
+files directly.
+
+The projection supports people, projects, products, decisions, and standing
+status records. It turns each record into focused fact units. Long sections
+are split. Each fact has a unique CQ identity domain plus entity and alias
+domains. `kb` remains the collector and reconciliation engine. CQ is only the
+local agent index.
+
+Set `CQ_LOCAL_DB_PATH` to an existing local CQ database file. The projection
+fails closed when remote CQ settings, remote authentication, drain mode,
+credentials, secrets, or access-incompatible source records are present.
+
+```bash
+# Write a non-mutating plan. It is not an apply input yet.
+uv run kb cq projection plan --output /tmp/kb-cq-plan.json
+
+# Review the plan, then make an explicit approved manifest.
+uv run kb cq projection approve /tmp/kb-cq-plan.json --output /tmp/kb-cq-approved.json
+
+# Apply only the approved manifest.
+uv run kb cq projection apply /tmp/kb-cq-approved.json
+
+# Inspect durable external ledger state and validate CQ mappings.
+uv run kb cq projection status
+uv run kb cq projection verify
+
+# Write a one-time all-scope backfill plan.
+uv run kb cq projection backfill --output /tmp/kb-cq-backfill.json
+```
+
+The ledger defaults to `~/.local/share/kb/cq-projection-ledger.json`. It stores
+source fingerprints, access classification, active and replaced KU IDs, stale
+state, per-scope expected-source completion, and recoverable pending operations.
+It is outside both the KB vault and CQ. The ledger, plans, and manifests use
+owner-only file mode.
+
+Canonical `access` or `classification` frontmatter controls access. The default
+for every projection scope is `internal`. Public records must declare
+`access: public`. Internal and classified records require
+`--authorization-policy all-local-agents` during planning. Approval binds a
+digest of the complete manifest, and apply checks it again.
+
+Apply acquires a single-run lock, recovers persisted pending CQ operations, and
+then rebuilds the current canonical projection before it makes a new CQ change.
+Any changed source, source-set, fragment boundary, access class, or projected
+content rejects the approved manifest. Apply records expected sources but does
+not mark a scope complete. `verify` performs exact identity and content-marker
+retrieval before it marks the verified scopes complete.
+
+Use a LaunchAgent only to run the command and schedule it. Put no projection
+workflow logic in launchd configuration.
+
 Requires Python 3.12+.
 
 ## Development
