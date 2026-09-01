@@ -578,6 +578,9 @@ class DescribeSafetyAndApproval:
         from kb.cq.projection.cq_cli import CQCli
 
         target, _ = _target(tmp_path)
+        executable = tmp_path / "cq"
+        executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        executable.chmod(0o755)
         observed = {}
 
         def runner(command, **kwargs):
@@ -586,6 +589,7 @@ class DescribeSafetyAndApproval:
 
         CQCli(
             target,
+            executable=str(executable),
             environment={"HOME": "/tmp/home", "PATH": "/custom", "UNRELATED_API_KEY": "x"},
             runner=runner,
         ).status()
@@ -593,7 +597,7 @@ class DescribeSafetyAndApproval:
         assert observed == {
             "HOME": "/tmp/home",
             "LANG": "C",
-            "PATH": str(Path(CQCli(target).executable).parent),
+            "PATH": str(executable.parent),
             "CQ_LOCAL_DB_PATH": str(target),
         }
 
