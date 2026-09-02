@@ -300,4 +300,13 @@ def verify(
 
 
 def _unit_text(unit: dict) -> str:
-    return "\n".join(str(unit.get(key, "")) for key in ("summary", "detail", "action", "body"))
+    """Render a CQ knowledge-unit dict as searchable text.
+
+    CQ query results carry the meaningful fields inside an ``insight``
+    sub-dict.  Older or synthetic units place them at the top level.
+    This function handles both layouts with a single field list.
+    """
+    payload = unit.get("insight")
+    if not isinstance(payload, dict):
+        payload = unit
+    return "\n".join(str(payload.get(key, "")) for key in ("summary", "detail", "action", "body"))
