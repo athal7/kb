@@ -398,6 +398,42 @@ class DescribeRecoveryAndVerification:
         assert ledger.completions()[0].complete is False
         assert result[0].valid is False
 
+    def it_verifies_with_nested_insight_detail_marker(self, tmp_path):
+        """Regression: CQ query results carry the marker inside insight.detail,
+        not at a top-level key.  _unit_text must find it there.
+        """
+        ledger = ProjectionLedger.open(tmp_path / "ledger.json")
+        ledger.put(
+            LedgerRecord(
+                scope=ProjectionScope.PEOPLE,
+                source_path="people/ada.md",
+                fragment="overview-1",
+                source_fingerprint="fingerprint",
+                classification=AccessClassification.PUBLIC,
+                identity_domain="kb-id-ada",
+                marker="kb-projection:ada:fingerprint",
+                active_ku_ids=["ku-1"],
+            )
+        )
+        ledger.set_scope_expectations({"people": ["people:people/ada.md#overview-1"]})
+        ledger.mark_scope_complete((ProjectionScope.PEOPLE,))
+        cq = FakeCQ()
+        cq.units["ku-1"] = {
+            "id": "ku-1",
+            "insight": {
+                "summary": "KB: Ada",
+                "detail": "## Status\nSome status text.\nkb-projection:ada:fingerprint",
+                "action": "Use this fact.",
+            },
+            # No top-level marker key exists — marker is only in insight.detail.
+        }
+
+        result = verify(ledger=ledger, cq=cq, scopes=(ProjectionScope.PEOPLE,))
+        assert result[0].valid is True
+
+        assert result[0].active_ku_ids == ["ku-1"]
+        assert ledger.completions()[0].complete is True
+
     def it_returns_nonzero_when_cli_verification_finds_invalid_mapping(self, tmp_path, monkeypatch):
         target, _ = _target(tmp_path)
         ledger = ProjectionLedger.open(tmp_path / "ledger.json")
