@@ -33,10 +33,10 @@ def _vault(tmp_path: Path, body: str = "# Ada\n\nPublic profile.\n") -> Path:
     return root
 
 
-def _target(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+def _target(tmp_path: Path) -> Path:
     target = tmp_path / "cq.db"
     target.touch()
-    return target.resolve(), {"CQ_LOCAL_DB_PATH": str(target.resolve())}
+    return target.resolve()
 
 
 class FakeCQ:
@@ -75,7 +75,7 @@ class DescribePlan:
 
     def it_writes_a_secure_unapproved_plan_through_the_cli(self, tmp_path, monkeypatch):
         root = _vault(tmp_path)
-        target, _ = _target(tmp_path)
+        target = _target(tmp_path)
         output = tmp_path / "plan.json"
         monkeypatch.setattr("kb.__main__._projection_target", lambda: target)
 
@@ -102,7 +102,7 @@ class DescribePlan:
     def it_splits_long_records_and_adds_entity_and_alias_domains(self, tmp_path):
         root = _vault(tmp_path, "# Ada\n\n## Current\n\n" + ("fact\n\n" * 2_000))
         ledger = ProjectionLedger.open(tmp_path / "ledger.json")
-        target, _ = _target(tmp_path)
+        target = _target(tmp_path)
 
         manifest = build_plan(
             kb_root=root,
@@ -122,7 +122,7 @@ class DescribePlan:
         (root / "projects").mkdir(parents=True)
         (root / "projects" / "project.md").write_text("# Project\n", encoding="utf-8")
         ledger = ProjectionLedger.open(tmp_path / "ledger.json")
-        target, _ = _target(tmp_path)
+        target = _target(tmp_path)
 
         with pytest.raises(ProjectionSafetyError):
             build_plan(
@@ -142,7 +142,7 @@ class DescribePlan:
             encoding="utf-8",
         )
         ledger = ProjectionLedger.open(tmp_path / "ledger.json")
-        target, _ = _target(tmp_path)
+        target = _target(tmp_path)
 
         source = (
             build_plan(
@@ -166,7 +166,7 @@ class DescribePlan:
 class DescribeRecoveryAndVerification:
     def it_persists_pending_create_then_recovers_without_duplicate_propose(self, tmp_path):
         root = _vault(tmp_path)
-        target, environment = _target(tmp_path)
+        target = _target(tmp_path)
         ledger = ProjectionLedger.open(tmp_path / "ledger.json")
         source = (
             build_plan(
@@ -192,7 +192,6 @@ class DescribeRecoveryAndVerification:
             ledger=ledger,
             kb_root=root,
             target_db=target,
-            environment=environment,
             cq=cq,
         )
         apply_manifest(
@@ -200,7 +199,6 @@ class DescribeRecoveryAndVerification:
             ledger=ProjectionLedger.open(ledger.path),
             kb_root=root,
             target_db=target,
-            environment=environment,
             cq=cq,
         )
 
@@ -218,7 +216,7 @@ class DescribeRecoveryAndVerification:
 
     def it_does_not_complete_scope_when_apply_cannot_retrieve_created_ku(self, tmp_path):
         root = _vault(tmp_path)
-        target, environment = _target(tmp_path)
+        target = _target(tmp_path)
         ledger = ProjectionLedger.open(tmp_path / "ledger.json")
         manifest = build_plan(
             kb_root=root,
@@ -238,7 +236,6 @@ class DescribeRecoveryAndVerification:
             ledger=ledger,
             kb_root=root,
             target_db=target,
-            environment=environment,
             cq=NoRetrieveCQ(),
         )
 
@@ -249,7 +246,7 @@ class DescribeRecoveryAndVerification:
 
     def it_keeps_replacement_recoverable_after_each_cq_mutation(self, tmp_path):
         root = _vault(tmp_path)
-        target, environment = _target(tmp_path)
+        target = _target(tmp_path)
         ledger = ProjectionLedger.open(tmp_path / "ledger.json")
         source = (
             build_plan(
@@ -288,7 +285,6 @@ class DescribeRecoveryAndVerification:
             ledger=ledger,
             kb_root=root,
             target_db=target,
-            environment=environment,
             cq=cq,
         )
 
@@ -301,7 +297,7 @@ class DescribeRecoveryAndVerification:
 
     def it_recovers_after_a_stale_failure_without_another_propose(self, tmp_path):
         root = _vault(tmp_path)
-        target, environment = _target(tmp_path)
+        target = _target(tmp_path)
         ledger = ProjectionLedger.open(tmp_path / "ledger.json")
         source = (
             build_plan(
@@ -350,7 +346,6 @@ class DescribeRecoveryAndVerification:
                 ledger=ledger,
                 kb_root=root,
                 target_db=target,
-                environment=environment,
                 cq=cq,
             )
 
@@ -362,7 +357,6 @@ class DescribeRecoveryAndVerification:
             ledger=ProjectionLedger.open(ledger.path),
             kb_root=root,
             target_db=target,
-            environment=environment,
             cq=cq,
         )
 
@@ -435,7 +429,7 @@ class DescribeRecoveryAndVerification:
         assert ledger.completions()[0].complete is True
 
     def it_returns_nonzero_when_cli_verification_finds_invalid_mapping(self, tmp_path, monkeypatch):
-        target, _ = _target(tmp_path)
+        target = _target(tmp_path)
         ledger = ProjectionLedger.open(tmp_path / "ledger.json")
         ledger.put(
             LedgerRecord(
@@ -481,7 +475,7 @@ class DescribeRecoveryAndVerification:
 
     def it_rejects_canonical_content_changed_after_approval(self, tmp_path):
         root = _vault(tmp_path)
-        target, environment = _target(tmp_path)
+        target = _target(tmp_path)
         ledger = ProjectionLedger.open(tmp_path / "ledger.json")
         planned = build_plan(
             kb_root=root,
@@ -503,11 +497,36 @@ class DescribeRecoveryAndVerification:
                 ledger=ledger,
                 kb_root=root,
                 target_db=target,
-                environment=environment,
                 cq=cq,
             )
 
         assert "propose" not in [call[0] for call in cq.calls]
+    def it_rejects_a_manifest_for_a_different_cq_target(self, tmp_path):
+        root = _vault(tmp_path)
+        approved_target = _target(tmp_path)
+        configured_target = tmp_path / "configured-cq.db"
+        configured_target.touch()
+        ledger = ProjectionLedger.open(tmp_path / "ledger.json")
+        manifest = build_plan(
+            kb_root=root,
+            ledger=ledger,
+            target_db=approved_target,
+            authorization_policy=None,
+            scopes=(ProjectionScope.PEOPLE,),
+        ).approve()
+        cq = FakeCQ()
+
+        with pytest.raises(ProjectionSafetyError, match="target does not match"):
+            apply_manifest(
+                manifest=manifest,
+                ledger=ledger,
+                kb_root=root,
+                target_db=configured_target,
+                cq=cq,
+            )
+
+        assert cq.calls == []
+
 
 
 @pytest.mark.parametrize(
@@ -522,7 +541,7 @@ class DescribeRecoveryAndVerification:
 )
 def test_apply_rejects_canonical_source_set_or_fragment_changes(tmp_path, mutation):
     root = _vault(tmp_path)
-    target, environment = _target(tmp_path)
+    target = _target(tmp_path)
     ledger = ProjectionLedger.open(tmp_path / "ledger.json")
     manifest = build_plan(
         kb_root=root,
@@ -558,7 +577,6 @@ def test_apply_rejects_canonical_source_set_or_fragment_changes(tmp_path, mutati
             ledger=ledger,
             kb_root=root,
             target_db=target,
-            environment=environment,
             cq=cq,
         )
 
@@ -569,7 +587,7 @@ class DescribeSafetyAndApproval:
     def it_uses_explicit_public_metadata_not_identifier_regexes(self, tmp_path):
         root = _vault(tmp_path, "# Ada\n\nContact: ada@example.test\n")
         ledger = ProjectionLedger.open(tmp_path / "ledger.json")
-        target, _ = _target(tmp_path)
+        target = _target(tmp_path)
 
         manifest = build_plan(
             kb_root=root,
@@ -581,19 +599,11 @@ class DescribeSafetyAndApproval:
 
         assert manifest.operations[0].source.classification is AccessClassification.PUBLIC
 
-    def it_rejects_any_credential_environment_variable(self, tmp_path):
-        from kb.cq.projection.safety import checked_target
-
-        target, environment = _target(tmp_path)
-        environment["UNRELATED_API_KEY"] = "secret"
-
-        with pytest.raises(ProjectionSafetyError):
-            checked_target(target, environment)
 
     def it_approval_digest_rejects_post_approval_manifest_edits(self, tmp_path):
         root = _vault(tmp_path)
         ledger = ProjectionLedger.open(tmp_path / "ledger.json")
-        target, _ = _target(tmp_path)
+        target = _target(tmp_path)
         manifest = build_plan(
             kb_root=root,
             ledger=ledger,
@@ -608,44 +618,3 @@ class DescribeSafetyAndApproval:
 
         assert edited.approved is False
 
-    def it_passes_only_minimal_environment_to_cq_child(self, tmp_path):
-        from subprocess import CompletedProcess
-
-        from kb.cq.projection.cq_cli import CQCli
-
-        target, _ = _target(tmp_path)
-        executable = tmp_path / "cq"
-        executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-        executable.chmod(0o755)
-        observed = {}
-
-        def runner(command, **kwargs):
-            observed.update(kwargs["env"])
-            return CompletedProcess(command, 0, '{"data": {}}', "")
-
-        CQCli(
-            target,
-            executable=str(executable),
-            environment={"HOME": "/tmp/home", "PATH": "/custom", "UNRELATED_API_KEY": "x"},
-            runner=runner,
-        ).status()
-
-        assert observed == {
-            "HOME": "/tmp/home",
-            "LANG": "C",
-            "PATH": str(executable.parent),
-            "CQ_LOCAL_DB_PATH": str(target),
-        }
-
-    def it_executes_fake_cq_from_a_non_system_path(self, tmp_path, monkeypatch):
-        from kb.cq.projection.cq_cli import CQCli
-
-        target, _ = _target(tmp_path)
-        bin_dir = tmp_path / "bin"
-        bin_dir.mkdir()
-        executable = bin_dir / "cq"
-        executable.write_text("#!/bin/sh\nprintf '{\"data\": {}}'\n", encoding="utf-8")
-        executable.chmod(0o755)
-        monkeypatch.setenv("PATH", str(bin_dir))
-
-        CQCli(target).status()

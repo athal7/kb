@@ -6,7 +6,7 @@ import json
 import os
 import shutil
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -19,23 +19,19 @@ class CQCommandError(RuntimeError):
 
 
 class CQCli:
-    """Local-only CQ client with a minimal child environment."""
+    """CQ CLI adapter. Delegates to the cq executable."""
 
     def __init__(
         self,
-        db_path: Path,
         *,
         executable: str = "cq",
-        environment: Mapping[str, str] | None = None,
         runner=subprocess.run,
     ) -> None:
-        self.db_path = db_path
         candidate = Path(executable)
         resolved = candidate if candidate.is_absolute() else Path(shutil.which(executable) or "")
         if not resolved.is_absolute() or not resolved.is_file() or not os.access(resolved, os.X_OK):
             raise CQCommandError(f"cannot locate executable cq: {executable}")
         self.executable = str(resolved.resolve())
-        self.environment = dict(environment or {})
         self.runner = runner
 
     def status(self) -> dict[str, Any]:
@@ -83,20 +79,13 @@ class CQCli:
         return {ku_id: record for record in records if (ku_id := _first_id(record)) is not None}
 
     def _run(self, *arguments: str) -> Any:
-        command = [self.executable, *arguments, "--db-path", str(self.db_path)]
-        environment = {
-            "HOME": self.environment.get("HOME", str(Path.home())),
-            "LANG": self.environment.get("LANG", "C"),
-            "PATH": str(Path(self.executable).parent),
-            "CQ_LOCAL_DB_PATH": str(self.db_path),
-        }
+        command = [self.executable, *arguments]
         try:
             completed = self.runner(
                 command,
                 check=False,
                 capture_output=True,
                 text=True,
-                env=environment,
             )
         except OSError as exc:
             raise CQCommandError(f"cannot execute cq: {exc}") from exc

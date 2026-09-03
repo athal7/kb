@@ -51,7 +51,6 @@ from kb.cq.projection import (
     build_plan,
     verify,
 )
-from kb.cq.projection.safety import checked_target
 from kb.platform.eventkit_services import EventKitCalendarService, EventKitRemindersService
 from kb.plugin_config import default_config_path, load_config
 from kb.plugin_loader import build_pane_registry, discover_plugins
@@ -793,12 +792,10 @@ def _projection_target() -> Path:
     configured = os.environ.get("CQ_LOCAL_DB_PATH")
     if not configured:
         raise click.ClickException("CQ_LOCAL_DB_PATH must configure the local CQ database")
-    try:
-        target = checked_target(Path(configured), os.environ)
-        CQCli(target).status()
-        return target
-    except RuntimeError as exc:
-        raise click.ClickException(str(exc)) from exc
+    target = Path(configured).expanduser().resolve()
+    if not target.is_file():
+        raise click.ClickException(f"configured CQ target does not exist: {target}")
+    return target
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -889,8 +886,7 @@ def projection_apply(manifest_path: Path, ledger_path: str | None, kb_root: str 
         ledger=_projection_ledger(ledger_path),
         kb_root=_projection_root(kb_root),
         target_db=target,
-        environment=dict(os.environ),
-        cq=CQCli(target, environment=os.environ),
+        cq=CQCli(),
     )
     click.echo(json.dumps({"results": [result.to_dict() for result in results]}, indent=2))
 
@@ -920,7 +916,7 @@ def projection_verify(scope: tuple[str, ...], ledger_path: str | None) -> None:
     target = _projection_target()
     results = verify(
         ledger=_projection_ledger(ledger_path),
-        cq=CQCli(target, environment=os.environ),
+        cq=CQCli(),
         scopes=_projection_scopes(scope),
     )
     invalid = sum(not result.valid for result in results)

@@ -22,7 +22,6 @@ from kb.cq.projection.models import (
 from kb.cq.projection.planner import build_plan
 from kb.cq.projection.safety import (
     ProjectionSafetyError,
-    checked_target,
     require_access_authorization,
 )
 
@@ -79,16 +78,14 @@ def apply_manifest(
     ledger: ProjectionLedger,
     kb_root: Path,
     target_db: Path,
-    environment: dict[str, str],
     cq: ProjectionCQClient | None = None,
 ) -> list[ApplyResult]:
     """Recover prior work, then revalidate the complete source plan under lock."""
     if not manifest.approved:
         raise ProjectionSafetyError("manifest approval digest is missing or invalid")
-    local_target = checked_target(target_db, environment)
-    if str(local_target) != manifest.target_db:
-        raise ProjectionSafetyError("manifest target differs from configured local CQ database")
-    client = cq or CQCli(local_target, environment=environment)
+    if target_db.expanduser().resolve() != Path(manifest.target_db).expanduser().resolve():
+        raise ProjectionSafetyError("manifest target does not match configured CQ target")
+    client = cq or CQCli()
     client.status()
     with ProjectionLock(ledger.path):
         _recover_pending(ledger, client)
