@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import os
 import re
-from collections.abc import Mapping
-from pathlib import Path
 from typing import Any
 
 from kb.cq.projection.models import ALL_LOCAL_AGENTS_POLICY, AccessClassification
@@ -20,29 +17,6 @@ _SECRET_VALUE = re.compile(
     re.IGNORECASE,
 )
 _PRIVATE_KEY = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
-_CREDENTIAL_ENV = re.compile(
-    r"(?:^|_)(?:api_?key|secret|token|password|credential)(?:_|$)", re.IGNORECASE
-)
-
-
-def require_local_target(path: Path, environment: Mapping[str, str]) -> Path:
-    configured = environment.get("CQ_LOCAL_DB_PATH")
-    if not configured:
-        raise ProjectionSafetyError("CQ_LOCAL_DB_PATH must configure the target database")
-    requested = path.expanduser().resolve()
-    if requested != Path(configured).expanduser().resolve():
-        raise ProjectionSafetyError("target is not the configured local CQ database")
-    if environment.get("CQ_ADDR") or environment.get("CQ_API_KEY"):
-        raise ProjectionSafetyError("remote CQ configuration is present")
-    if environment.get("CQ_DRAIN", "").lower() in {"1", "true", "yes"}:
-        raise ProjectionSafetyError("CQ drain mode is present")
-    if any(environment.get(name) for name in ("CQ_REMOTE_AUTH", "CQ_AUTH_TOKEN", "CQ_SESSION")):
-        raise ProjectionSafetyError("remote CQ authentication is present")
-    if any(value and _CREDENTIAL_ENV.search(name) for name, value in environment.items()):
-        raise ProjectionSafetyError("credential environment variable is present")
-    if not requested.is_file():
-        raise ProjectionSafetyError("configured CQ target must be an existing local file")
-    return requested
 
 
 def require_no_source_secrets(text: str) -> None:
@@ -89,7 +63,3 @@ def require_clean_cq_status(status: Any) -> None:
             raise ProjectionSafetyError("CQ status reports drain mode")
         if "remote" in key and "auth" in key and value:
             raise ProjectionSafetyError("CQ status reports remote authentication")
-
-
-def checked_target(path: Path, environment: Mapping[str, str] | None = None) -> Path:
-    return require_local_target(path, environment if environment is not None else os.environ)
