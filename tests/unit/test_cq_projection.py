@@ -203,15 +203,7 @@ class DescribeRecoveryAndVerification:
         )
 
         assert [call[0] for call in cq.calls].count("propose") == 1
-        assert ledger.completions()[0].complete is False
-        assert all(
-            result.valid
-            for result in verify(
-                ledger=ledger,
-                cq=cq,
-                scopes=(ProjectionScope.PEOPLE,),
-            )
-        )
+        # apply_manifest now verifies and marks scopes complete internally
         assert ledger.completions()[0].complete is True
 
     def it_does_not_complete_scope_when_apply_cannot_retrieve_created_ku(self, tmp_path):
@@ -618,3 +610,210 @@ class DescribeSafetyAndApproval:
 
         assert edited.approved is False
 
+
+class DescribeAllUnchangedBackfillCompletion:
+    """Contract: apply_manifest must persist completion markers when every
+    operation is UNCHANGED and all records already exist and are valid.
+
+    Reproduction case: an approved all-unchanged backfill manifest applies
+    with ``{"results": []}``. Reports must show all facts valid and no
+    pending records. Status must leave every scope with a non-null
+    ``backfill_complete_at`` and ``complete`` set to true.
+    """
+
+    def it_marks_scopes_complete_after_all_unchanged_apply(self, tmp_path):
+        """Verify the exact defect scenario: approved all-UNCHANGED manifest,
+        empty results, then completion markers are persisted.
+        """
+        root = _vault(tmp_path)
+        target = _target(tmp_path)
+        ledger = ProjectionLedger.open(tmp_path / "ledger.json")
+
+        # --- Phase 1: initial CREATE to establish records ---
+        manifest_create = build_plan(
+            kb_root=root,
+            ledger=ledger,
+            target_db=target,
+            authorization_policy=None,
+            scopes=(ProjectionScope.PEOPLE,),
+        ).approve()
+        cq = FakeCQ()
+
+        apply_manifest(
+            manifest=manifest_create,
+            ledger=ledger,
+            kb_root=root,
+            target_db=target,
+            cq=cq,
+         )
+
+        # After first apply: one record exists, scope is complete
+        completions = ledger.completions()
+        people_comp = next(c for c in completions if c.scope is ProjectionScope.PEOPLE)
+        assert people_comp.active == 1
+        assert people_comp.complete is True
+        assert people_comp.backfill_complete_at is not None
+        assert ledger.pending() == []
+
+        # --- Phase 2: re-plan produces all-UNCHANGED operations ---
+        manifest_unchanged = build_plan(
+            kb_root=root,
+            ledger=ledger,
+            target_db=target,
+            authorization_policy=None,
+            scopes=(ProjectionScope.PEOPLE,),
+        ).approve()
+
+        assert all(op.action is ProjectionAction.UNCHANGED for op in manifest_unchanged.operations)
+
+        # --- Phase 3: apply the all-UNCHANGED manifest ---
+        results = apply_manifest(
+            manifest=manifest_unchanged,
+            ledger=ledger,
+            kb_root=root,
+            target_db=target,
+            cq=cq,
+        )
+
+        # No operations were performed — results must be empty
+        assert results == []
+
+        # Completion markers must still be set
+        completions = ledger.completions()
+        people_comp = next(c for c in completions if c.scope is ProjectionScope.PEOPLE)
+        assert people_comp.active == 1
+        assert people_comp.complete is True
+        assert people_comp.backfill_complete_at is not None
+        assert ledger.pending() == []
+    def it_marks_scopes_complete_via_cli_apply_then_status(self, tmp_path, monkeypatch):
+        """End-to-end: backfill plan → approve → apply → status shows complete."""
+        root = _vault(tmp_path)
+        target = _target(tmp_path)
+        plan_path = tmp_path / "plan.json"
+        approved_path = tmp_path / "approved.json"
+        manifest_path = tmp_path / "manifest.json"
+        ledger_path = tmp_path / "ledger.json"
+
+        shared_cq = FakeCQ()
+
+        monkeypatch.setattr("kb.__main__._projection_target", lambda: target)
+        monkeypatch.setattr("kb.__main__._projection_root", lambda _: root)
+        monkeypatch.setattr("kb.__main__.CQCli", lambda *args, **kwargs: shared_cq)
+
+        # backfill → plan
+        result = CliRunner().invoke(
+            cli,
+            [
+                "cq",
+                "projection",
+                "backfill",
+                "--ledger-path",
+                str(ledger_path),
+                "--output",
+                str(plan_path),
+            ],
+        )
+        assert result.exit_code == 0
+
+        # approve
+        result = CliRunner().invoke(
+            cli,
+            [
+                "cq",
+                "projection",
+                "approve",
+                str(plan_path),
+                "--output",
+                str(approved_path),
+            ],
+        )
+        assert result.exit_code == 0
+
+        # apply (CREATE)
+        result = CliRunner().invoke(
+            cli,
+            [
+                "cq",
+                "projection",
+                "apply",
+                str(approved_path),
+                "--ledger-path",
+                str(ledger_path),
+                "--kb-root",
+                str(root),
+            ],
+        )
+        assert result.exit_code == 0
+        status_output = __import__("json").loads(result.output)
+        assert all(r["action"] == "create" for r in status_output["results"])
+
+        # re-plan to get all-UNCHANGED
+        result = CliRunner().invoke(
+            cli,
+            [
+                "cq",
+                "projection",
+                "plan",
+                "--ledger-path",
+                str(ledger_path),
+                "--scope",
+                "people",
+                "--output",
+                str(manifest_path),
+            ],
+        )
+        assert result.exit_code == 0
+        manifest = ProjectionManifest.from_dict(__import__("json").loads(manifest_path.read_text()))
+        assert all(op.action == ProjectionAction.UNCHANGED for op in manifest.operations)
+
+        # approve the unchanged manifest
+        result = CliRunner().invoke(
+            cli,
+            [
+                "cq",
+                "projection",
+                "approve",
+                str(manifest_path),
+                "--output",
+                str(approved_path),
+            ],
+        )
+        assert result.exit_code == 0
+
+        # apply the all-UNCHANGED manifest
+        result = CliRunner().invoke(
+            cli,
+            [
+                "cq",
+                "projection",
+                "apply",
+                str(approved_path),
+                "--ledger-path",
+                str(ledger_path),
+                "--kb-root",
+                str(root),
+            ],
+        )
+        assert result.exit_code == 0
+        status_output = __import__("json").loads(result.output)
+        assert status_output["results"] == []
+
+        # status must show complete
+        result = CliRunner().invoke(
+            cli,
+            [
+                "cq",
+                "projection",
+                "status",
+                "--ledger-path",
+                str(ledger_path),
+            ],
+        )
+        assert result.exit_code == 0
+        status = __import__("json").loads(result.output)
+        people_comp = next(
+            s for s in status["scopes"] if s["scope"] == "people"
+        )
+        assert people_comp["complete"] is True
+        assert people_comp["backfill_complete_at"] is not None
+        assert people_comp["active"] == people_comp["expected"]
