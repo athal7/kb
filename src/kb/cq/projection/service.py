@@ -92,6 +92,8 @@ def apply_manifest(
         _validate_manifest_sources(manifest, ledger, kb_root)
         results = [_apply_operation(ledger, client, operation) for operation in manifest.operations]
         ledger.set_scope_expectations(manifest.scope_expectations)
+        scopes = tuple(ProjectionScope(scope) for scope in manifest.scope_expectations)
+        _verify_scopes(ledger=ledger, cq=client, scopes=scopes)
     return [result for result in results if result is not None]
 
 
@@ -217,6 +219,84 @@ def _validate_manifest_sources(
                 raise ProjectionSafetyError("replacement operation conflicts with ledger mapping")
 
 
+def _verify_scopes(
+    ledger: ProjectionLedger,
+    cq: ProjectionCQClient,
+    scopes: tuple[ProjectionScope, ...],
+) -> tuple[list[VerificationResult], list[ProjectionScope]]:
+    """Core verification without lock. Returns (results, complete_scopes)."""
+    results: list[VerificationResult] = []
+    complete_scopes: list[ProjectionScope] = []
+    clear_scopes: dict[str, list[str]] = {}
+    for scope in scopes:
+        expected_keys = ledger.expected_keys(scope)
+        if expected_keys is None:
+            results.append(
+                VerificationResult(
+                    "",
+                    "",
+                    scope,
+                    [],
+                    [],
+                    False,
+                    "scope has no expected-source marker",
+                )
+            )
+            continue
+        clear_scopes[scope.value] = expected_keys
+        records = {record.key: record for record in ledger.records(scope)}
+        scope_results: list[VerificationResult] = []
+        for key in expected_keys:
+            record = records.get(key)
+            if record is None:
+                source_path, fragment = key.split(":", 1)[1].split("#", 1)
+                scope_results.append(
+                    VerificationResult(
+                        source_path,
+                        fragment,
+                        scope,
+                        [],
+                        [],
+                        False,
+                        "expected source has no ledger mapping",
+                    )
+                )
+                continue
+            found = cq.find_identity(record.identity_domain)
+            matching = [
+                ku_id
+                for ku_id, unit in found.items()
+                if record.marker in _unit_text(unit)
+            ]
+            valid = (
+                not record.stale
+                and len(found) == 1
+                and matching == record.active_ku_ids
+                and bool(record.active_ku_ids)
+            )
+            scope_results.append(
+                VerificationResult(
+                    record.source_path,
+                    record.fragment,
+                    scope,
+                    record.active_ku_ids,
+                    matching,
+                    valid,
+                    "valid"
+                    if valid
+                    else "CQ identity, KU ID, or content marker mismatch",
+                )
+            )
+        results.extend(scope_results)
+        if all(result.valid for result in scope_results):
+            complete_scopes.append(scope)
+    if clear_scopes:
+        ledger.set_scope_expectations(clear_scopes)
+    if complete_scopes:
+        ledger.mark_scope_complete(tuple(complete_scopes))
+    return results, complete_scopes
+
+
 def verify(
     *, ledger: ProjectionLedger, cq: ProjectionCQClient, scopes: tuple[ProjectionScope, ...]
 ) -> list[VerificationResult]:
@@ -224,75 +304,7 @@ def verify(
     with ProjectionLock(ledger.path):
         if ledger.pending():
             raise ProjectionSafetyError("cannot verify while CQ operations are pending")
-        results: list[VerificationResult] = []
-        complete_scopes: list[ProjectionScope] = []
-        clear_scopes: dict[str, list[str]] = {}
-        for scope in scopes:
-            expected_keys = ledger.expected_keys(scope)
-            if expected_keys is None:
-                results.append(
-                    VerificationResult(
-                        "",
-                        "",
-                        scope,
-                        [],
-                        [],
-                        False,
-                        "scope has no expected-source marker",
-                    )
-                )
-                continue
-            clear_scopes[scope.value] = expected_keys
-            records = {record.key: record for record in ledger.records(scope)}
-            scope_results: list[VerificationResult] = []
-            for key in expected_keys:
-                record = records.get(key)
-                if record is None:
-                    source_path, fragment = key.split(":", 1)[1].split("#", 1)
-                    scope_results.append(
-                        VerificationResult(
-                            source_path,
-                            fragment,
-                            scope,
-                            [],
-                            [],
-                            False,
-                            "expected source has no ledger mapping",
-                        )
-                    )
-                    continue
-                found = cq.find_identity(record.identity_domain)
-                matching = [
-                    ku_id
-                    for ku_id, unit in found.items()
-                    if record.marker in _unit_text(unit)
-                ]
-                valid = (
-                    not record.stale
-                    and len(found) == 1
-                    and matching == record.active_ku_ids
-                    and bool(record.active_ku_ids)
-                )
-                scope_results.append(
-                    VerificationResult(
-                        record.source_path,
-                        record.fragment,
-                        scope,
-                        record.active_ku_ids,
-                        matching,
-                        valid,
-                        "valid"
-                        if valid
-                        else "CQ identity, KU ID, or content marker mismatch",
-                    )
-                )
-            results.extend(scope_results)
-            if all(result.valid for result in scope_results):
-                complete_scopes.append(scope)
-        if clear_scopes:
-            ledger.set_scope_expectations(clear_scopes)
-        if complete_scopes:
-            ledger.mark_scope_complete(tuple(complete_scopes))
+        results, _ = _verify_scopes(ledger, cq, scopes)
         return results
 
 
