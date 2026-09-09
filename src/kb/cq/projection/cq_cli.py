@@ -60,7 +60,7 @@ class CQCli:
         return ku_id
 
     def stale(self, ku_id: str) -> None:
-        self._run("flag", ku_id, "--reason", "stale")
+        self._run("flag", ku_id, "--reason", "stale", expect_json=False)
 
     def find_identity(self, identity_domain: str) -> dict[str, dict[str, Any]]:
         records = _records(
@@ -78,7 +78,7 @@ class CQCli:
             raise CQCommandError("identity query reached CQ result limit; retrieval is incomplete")
         return {ku_id: record for record in records if (ku_id := _first_id(record)) is not None}
 
-    def _run(self, *arguments: str) -> Any:
+    def _run(self, *arguments: str, expect_json: bool = True) -> Any:
         command = [self.executable, *arguments]
         try:
             completed = self.runner(
@@ -92,6 +92,8 @@ class CQCli:
         if completed.returncode != 0:
             message = completed.stderr.strip() or completed.stdout.strip()
             raise CQCommandError(f"cq command failed: {message}")
+        if not expect_json:
+            return None
         try:
             return json.loads(completed.stdout)
         except json.JSONDecodeError as exc:

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
 
 from kb.__main__ import cli
+from kb.cq.projection.cq_cli import CQCli, CQCommandError
 from kb.cq.projection.ledger import ProjectionLedger
 from kb.cq.projection.lock import ProjectionLock, ProjectionLockError
 from kb.cq.projection.models import (
@@ -63,6 +65,39 @@ class FakeCQ:
     def find_identity(self, identity_domain: str) -> dict[str, dict]:
         self.calls.append(("find", identity_domain))
         return self.units
+
+
+class DescribeCQCli:
+    def it_accepts_non_json_success_from_stale_mutation(self, tmp_path):
+        executable = tmp_path / "cq"
+        executable.touch(mode=0o700)
+        calls = []
+
+        def runner(command, **kwargs):
+            calls.append((command, kwargs))
+            return SimpleNamespace(returncode=0, stdout="Knowledge unit flagged as stale.\n", stderr="")
+
+        cq = CQCli(executable=str(executable), runner=runner)
+
+        assert cq.stale("ku-existing") is None
+        assert calls == [
+            (
+                [str(executable.resolve()), "flag", "ku-existing", "--reason", "stale"],
+                {"check": False, "capture_output": True, "text": True},
+            )
+        ]
+
+    def it_still_rejects_non_json_output_for_structured_commands(self, tmp_path):
+        executable = tmp_path / "cq"
+        executable.touch(mode=0o700)
+
+        def runner(command, **kwargs):
+            return SimpleNamespace(returncode=0, stdout="not json\n", stderr="")
+
+        cq = CQCli(executable=str(executable), runner=runner)
+
+        with pytest.raises(CQCommandError, match="non-JSON"):
+            cq.status()
 
 
 class DescribePlan:
