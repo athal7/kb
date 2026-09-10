@@ -15,6 +15,7 @@ from kb.cq.projection.lock import ProjectionLock, ProjectionLockError
 from kb.cq.projection.models import (
     AccessClassification,
     LedgerRecord,
+    PendingOperation,
     ProjectionAction,
     ProjectionManifest,
     ProjectionOperation,
@@ -321,6 +322,224 @@ class DescribeRecoveryAndVerification:
         assert record.active_ku_ids == ["ku-1"]
         assert record.replaced_ku_ids == ["ku-old"]
         assert reloaded.pending() == []
+
+    def it_replaces_active_ku_without_reusing_the_id_it_stales(self, tmp_path):
+        root = _vault(tmp_path)
+        target = _target(tmp_path)
+        ledger = ProjectionLedger.open(tmp_path / "ledger.json")
+        cq = FakeCQ()
+
+        initial = build_plan(
+            kb_root=root,
+            ledger=ledger,
+            target_db=target,
+            authorization_policy=None,
+            scopes=(ProjectionScope.PEOPLE,),
+        ).approve()
+        apply_manifest(
+            manifest=initial,
+            ledger=ledger,
+            kb_root=root,
+            target_db=target,
+            cq=cq,
+        )
+
+        (root / "people" / "ada.md").write_text(
+            "---\naccess: public\n---\n# Ada\n\nChanged public profile.\n",
+            encoding="utf-8",
+        )
+        replacement = build_plan(
+            kb_root=root,
+            ledger=ledger,
+            target_db=target,
+            authorization_policy=None,
+            scopes=(ProjectionScope.PEOPLE,),
+        ).approve()
+
+        results = apply_manifest(
+            manifest=replacement,
+            ledger=ledger,
+            kb_root=root,
+            target_db=target,
+            cq=cq,
+        )
+
+        assert results[0].action is ProjectionAction.REPLACE
+        assert results[0].created_ku_ids == ["ku-2"]
+        assert results[0].staled_ku_ids == ["ku-1"]
+        record = ledger.records(ProjectionScope.PEOPLE)[0]
+        assert record.active_ku_ids == ["ku-2"]
+        assert record.replaced_ku_ids == ["ku-1"]
+
+        no_op = build_plan(
+            kb_root=root,
+            ledger=ledger,
+            target_db=target,
+            authorization_policy=None,
+            scopes=(ProjectionScope.PEOPLE,),
+        ).approve()
+        assert all(operation.action is ProjectionAction.UNCHANGED for operation in no_op.operations)
+        assert (
+            apply_manifest(
+                manifest=no_op,
+                ledger=ledger,
+                kb_root=root,
+                target_db=target,
+                cq=cq,
+            )
+            == []
+        )
+        verification = verify(
+            ledger=ledger,
+            cq=cq,
+            scopes=(ProjectionScope.PEOPLE,),
+        )
+        assert all(result.valid for result in verification)
+
+    def it_repairs_an_active_replaced_overlap_without_repeating_stale(self, tmp_path):
+        root = _vault(tmp_path)
+        target = _target(tmp_path)
+        ledger = ProjectionLedger.open(tmp_path / "ledger.json")
+        scopes = tuple(ProjectionScope)
+        source = build_plan(
+            kb_root=root,
+            ledger=ledger,
+            target_db=target,
+            authorization_policy=None,
+            scopes=scopes,
+        ).operations[0].source
+        ledger.put(
+            LedgerRecord(
+                scope=source.scope,
+                source_path=source.source_path,
+                fragment=source.fragment,
+                source_fingerprint=source.fingerprint,
+                classification=source.classification,
+                identity_domain=source.identity_domain,
+                marker=source.marker,
+                active_ku_ids=["ku-corrupt"],
+                replaced_ku_ids=["ku-corrupt"],
+            )
+        )
+        ledger.save()
+
+        class RejectRepeatedStaleCQ(FakeCQ):
+            def stale(self, ku_id: str) -> None:
+                raise RuntimeError(f"KU is already stale: {ku_id}")
+
+        cq = RejectRepeatedStaleCQ()
+
+        repair = build_plan(
+            kb_root=root,
+            ledger=ledger,
+            target_db=target,
+            authorization_policy=None,
+            scopes=scopes,
+        ).approve()
+
+        assert [operation.action for operation in repair.operations] == [
+            ProjectionAction.REPLACE
+        ]
+        assert repair.operations[0].reason == "active KU is recorded as replaced"
+
+        results = apply_manifest(
+            manifest=repair,
+            ledger=ledger,
+            kb_root=root,
+            target_db=target,
+            cq=cq,
+        )
+
+        assert results[0].created_ku_ids == ["ku-1"]
+        assert results[0].staled_ku_ids == ["ku-corrupt"]
+        record = ledger.records(ProjectionScope.PEOPLE)[0]
+        assert record.active_ku_ids == ["ku-1"]
+        assert record.replaced_ku_ids == ["ku-corrupt"]
+        assert set(record.active_ku_ids).isdisjoint(record.replaced_ku_ids)
+        verification = verify(ledger=ledger, cq=cq, scopes=scopes)
+        assert verification
+        assert all(result.valid for result in verification)
+        assert all(completion.complete for completion in ledger.completions())
+
+        no_op = build_plan(
+            kb_root=root,
+            ledger=ledger,
+            target_db=target,
+            authorization_policy=None,
+            scopes=scopes,
+        )
+        assert all(operation.action is ProjectionAction.UNCHANGED for operation in no_op.operations)
+
+    def it_recovers_only_the_current_replacement_and_preserves_history(self, tmp_path):
+        root = _vault(tmp_path)
+        target = _target(tmp_path)
+        ledger = ProjectionLedger.open(tmp_path / "ledger.json")
+        source = build_plan(
+            kb_root=root,
+            ledger=ledger,
+            target_db=target,
+            authorization_policy=None,
+            scopes=(ProjectionScope.PEOPLE,),
+        ).operations[0].source
+        ledger.put(
+            LedgerRecord(
+                scope=source.scope,
+                source_path=source.source_path,
+                fragment=source.fragment,
+                source_fingerprint="old",
+                classification=source.classification,
+                identity_domain=source.identity_domain,
+                marker="old marker",
+                active_ku_ids=["ku-old"],
+                replaced_ku_ids=["ku-older"],
+            )
+        )
+        plan = build_plan(
+            kb_root=root,
+            ledger=ledger,
+            target_db=target,
+            authorization_policy=None,
+            scopes=(ProjectionScope.PEOPLE,),
+        ).approve()
+        ledger.put_pending(PendingOperation(plan.operations[0]))
+
+        class RecoveryCQ(FakeCQ):
+            first_lookup = True
+
+            def find_identity(self, identity_domain: str) -> dict[str, dict]:
+                self.calls.append(("find", identity_domain))
+                if self.first_lookup:
+                    self.first_lookup = False
+                    return self.units
+                return {"ku-new": self.units["ku-new"]}
+
+        cq = RecoveryCQ()
+        cq.units = {
+            "ku-older": {"id": "ku-older", "detail": source.marker},
+            "ku-old": {"id": "ku-old", "detail": "old marker"},
+            "ku-wrong": {"id": "ku-wrong", "detail": "wrong marker"},
+            "ku-new": {"id": "ku-new", "detail": source.marker},
+        }
+
+        apply_manifest(
+            manifest=plan,
+            ledger=ledger,
+            kb_root=root,
+            target_db=target,
+            cq=cq,
+        )
+
+        assert "propose" not in [call[0] for call in cq.calls]
+        record = ledger.records(ProjectionScope.PEOPLE)[0]
+        assert record.active_ku_ids == ["ku-new"]
+        assert record.replaced_ku_ids == ["ku-old", "ku-older"]
+        assert ledger.pending() == []
+        verification = verify(
+            ledger=ledger,
+            cq=cq,
+            scopes=(ProjectionScope.PEOPLE,),
+        )
+        assert all(result.valid for result in verification)
 
     def it_recovers_after_a_stale_failure_without_another_propose(self, tmp_path):
         root = _vault(tmp_path)

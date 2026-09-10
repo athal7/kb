@@ -111,6 +111,10 @@ def _apply_operation(
         and existing.source_fingerprint == operation.source.fingerprint
         and existing.active_ku_ids
         and not existing.stale
+        and (
+            operation.action is not ProjectionAction.REPLACE
+            or existing.active_ku_ids != operation.previous_ku_ids
+        )
     ):
         return None
     pending = PendingOperation(operation)
@@ -127,21 +131,30 @@ def _continue_pending(
     ledger: ProjectionLedger, client: ProjectionCQClient, pending: PendingOperation
 ) -> ApplyResult:
     operation = pending.operation
+    record = ledger.get(
+        operation.source.scope, operation.source.source_path, operation.source.fragment
+    )
     if operation.action is not ProjectionAction.STALE and not pending.created_ku_ids:
         existing = client.find_identity(operation.source.identity_domain)
-        if len(existing) > 1:
-            raise ProjectionSafetyError("projection identity maps to multiple CQ KUs")
-        pending.created_ku_ids = list(existing) or [client.propose(operation.source)]
+        obsolete_ku_ids = set(operation.previous_ku_ids)
+        if record is not None:
+            obsolete_ku_ids.update(record.replaced_ku_ids)
+        created_ku_ids = [
+            ku_id
+            for ku_id, unit in existing.items()
+            if ku_id not in obsolete_ku_ids and operation.source.marker in _unit_text(unit)
+        ]
+        if len(created_ku_ids) > 1:
+            raise ProjectionSafetyError("projection identity maps to multiple active CQ KUs")
+        pending.created_ku_ids = created_ku_ids or [client.propose(operation.source)]
         ledger.put_pending(pending)
     for ku_id in operation.previous_ku_ids:
         if ku_id not in pending.staled_ku_ids:
-            client.stale(ku_id)
+            if record is None or ku_id not in record.replaced_ku_ids:
+                client.stale(ku_id)
             pending.staled_ku_ids.append(ku_id)
             ledger.put_pending(pending)
     if operation.action is ProjectionAction.STALE:
-        record = ledger.get(
-            operation.source.scope, operation.source.source_path, operation.source.fragment
-        )
         if record is not None:
             record.active_ku_ids = []
             record.replaced_ku_ids = sorted(set(record.replaced_ku_ids + pending.staled_ku_ids))
@@ -159,7 +172,10 @@ def _continue_pending(
                 identity_domain=operation.source.identity_domain,
                 marker=operation.source.marker,
                 active_ku_ids=pending.created_ku_ids,
-                replaced_ku_ids=pending.staled_ku_ids,
+                replaced_ku_ids=sorted(
+                    set(pending.staled_ku_ids)
+                    | (set(record.replaced_ku_ids) if record is not None else set())
+                ),
                 stale=False,
             )
         )

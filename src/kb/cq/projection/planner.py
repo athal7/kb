@@ -71,6 +71,12 @@ def build_plan(
         record = ledger.get(source.scope, source.source_path, source.fragment)
         if record is None:
             action, previous, reason = ProjectionAction.CREATE, [], "source has no ledger mapping"
+        elif not set(record.active_ku_ids).isdisjoint(record.replaced_ku_ids):
+            action, previous, reason = (
+                ProjectionAction.REPLACE,
+                record.active_ku_ids,
+                "active KU is recorded as replaced",
+            )
         elif record.source_fingerprint != source.fingerprint or record.stale:
             action, previous, reason = (
                 ProjectionAction.REPLACE,
