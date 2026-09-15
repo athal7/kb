@@ -76,7 +76,11 @@ class CQCli:
         )
         if len(records) == 50:
             raise CQCommandError("identity query reached CQ result limit; retrieval is incomplete")
-        return {ku_id: record for record in records if (ku_id := _first_id(record)) is not None}
+        return {
+            ku_id: record
+            for record in records
+            if (ku_id := _first_id(record)) is not None and not _has_stale_flag(record)
+        }
 
     def _run(self, *arguments: str, expect_json: bool = True) -> Any:
         command = [self.executable, *arguments]
@@ -98,6 +102,19 @@ class CQCli:
             return json.loads(completed.stdout)
         except json.JSONDecodeError as exc:
             raise CQCommandError("cq command returned non-JSON output") from exc
+
+
+def _has_stale_flag(record: dict[str, Any]) -> bool:
+    if _contains_stale_flag(record.get("flags")):
+        return True
+    evidence = record.get("evidence")
+    return isinstance(evidence, dict) and _contains_stale_flag(evidence.get("flags"))
+
+
+def _contains_stale_flag(flags: Any) -> bool:
+    if not isinstance(flags, list):
+        return False
+    return any(isinstance(flag, dict) and flag.get("reason") == "stale" for flag in flags)
 
 
 def _first_id(value: Any) -> str | None:
