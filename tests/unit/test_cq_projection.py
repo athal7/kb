@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -99,6 +100,45 @@ class DescribeCQCli:
 
         with pytest.raises(CQCommandError, match="non-JSON"):
             cq.status()
+
+
+    def it_filters_stale_records_from_identity_lookup(self, tmp_path):
+        executable = tmp_path / "cq"
+        executable.touch(mode=0o700)
+        calls = []
+        active = {"id": "ku-active", "detail": "active marker"}
+        stale = {
+            "id": "ku-stale",
+            "detail": "replaced marker",
+            "flags": [{"reason": "stale"}],
+        }
+
+        def runner(command, **kwargs):
+            calls.append((command, kwargs))
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({"results": [active, stale]}),
+                stderr="",
+            )
+
+        cq = CQCli(executable=str(executable), runner=runner)
+
+        assert cq.find_identity("kb-id-example") == {"ku-active": active}
+        assert calls == [
+            (
+                [
+                    str(executable.resolve()),
+                    "query",
+                    "--format",
+                    "json",
+                    "--domain",
+                    "kb-id-example",
+                    "--limit",
+                    "50",
+                ],
+                {"check": False, "capture_output": True, "text": True},
+            )
+        ]
 
 
 class DescribePlan:
